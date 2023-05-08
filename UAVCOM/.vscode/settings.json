@@ -1,0 +1,14 @@
+{
+    "java.project.sourcePaths": ["src"],
+    "java.project.outputPath": "bin",
+    "java.project.referencedLibraries": {
+        "include": [
+            "lib/**/*.jar"
+        ],
+        "exclude": [
+            "lib/RXTXcomm.jar",
+            "lib/javafx-sdk-18.0.2/RXTXcomm.jar",
+            "lib/javafx-sdk-18.0.2/lib/RXTXcomm.jar"
+        ]
+    }
+}
