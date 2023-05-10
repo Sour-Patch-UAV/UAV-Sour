@@ -1,3 +1,7 @@
+// include servo library for servo management
+#include <Servo.h>
+Servo servos; // global var
+
 const size_t bufferLength = 32; // define the maximum buffer length
 uint8_t buffer[bufferLength]; // create a buffer array of bytes
 uint8_t actionBytes[5]; // create an array to store the action bytes
@@ -6,10 +10,13 @@ const uint8_t helloTeensy[] = {32, 84, 101, 101, 110, 115, 121, 44, 32, 97, 114,
 const uint8_t PRE_JAVA[] = {45, 106, 97, 118, 97}; // states -java
 bool programready = false; // initialize pr (Program Ready) boolean to false
 
+int angle = 700;
 void setup() {
   // put your setup code here, to run once:
   Serial.begin(115200);
   Serial3.begin(115200);
+  pinMode(23, OUTPUT); // output to 23
+  servos.attach(23);
 }
 
 void CLEANBUF() {
@@ -42,20 +49,26 @@ void VERIFY(size_t i) {
 }
 
 void TRANSLATE(size_t i) {
-  Serial.println("Translating... PR IS TRUE...");
+  Serial3.println("Translating... PR IS TRUE...");
   // loop through the stored bytes
   for (size_t j = 0; j < i-5; j++) {
-    Serial.print(buffer[j]); // print each byte to the Serial Monitor
-    Serial.print(" "); // add a space between each byte
+    Serial3.print(buffer[j]); // print each byte to the Serial Monitor
+    Serial3.print(" "); // add a space between each byte
   }
-  Serial.println(); // add a newline at the end of the printed bytes
+  Serial3.println(); // add a newline at the end of the printed bytes
   // print the action bytes to the Serial Monitor
-  Serial.print("Action: ");
+  Serial3.print("Action: ");
   for (size_t j = 0; j < 5; j++) {
-    Serial.print(actionBytes[j]); // print each byte to the Serial Monitor
-    Serial.print(" "); // add a space between each byte
+    Serial3.print(actionBytes[j]); // print each byte to the Serial Monitor
+    Serial3.print(" "); // add a space between each byte
   }
   CLEANBUF();
+}
+
+void servo() {
+  Serial3.print("Moving Servo to angle: "); Serial3.println(angle);
+  if (angle == 2300) angle = 0;
+  servos.writeMicroseconds(angle += 100);
 }
 
 void loop() {
@@ -75,10 +88,11 @@ void loop() {
       if (programready) TRANSLATE(i);
       if (!programready) VERIFY(i);
     }
-    
+    programready = false;
     // clear the buffer array
     CLEANBUF();
   }
-  delay(500);
-  Serial3.println("Teensy is bored...");
+  servo();
+  delay(1000);
+  Serial3.println("Teensy is board...");
 }

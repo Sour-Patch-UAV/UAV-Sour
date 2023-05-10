@@ -1,74 +1,135 @@
 package PARENTS;
-import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.io.Serial;
 
 import com.fazecast.jSerialComm.SerialPort;
 
-import STATICS.*;
+import EXCEPTIONS.SerialException;
+import READERS.SerialReader;
+import STATICS.GetClassName;
 
 // communications class for storing properties based on the current state of the communications
 public class CommunicationSupervisor {
 
     private boolean CommunicationSuccessful = false;
+    private boolean ActiveSerialReader = false; // states true if a reader is currently working on the line
     private SerialPort OpenSerialPort;
     private InputStream SerialPortInputStream;
     private OutputStream SerialPortOutputStream;
     
     // default constructor
     public CommunicationSupervisor() {
-        System.out.println("Communication Supervisor Initialized");
+        System.out.println(GetClassName.THIS_CLASSNAME(this, "Communication Supervisor Initialized"));
     };
-
-    public void SerialPortReportToSupervisor(SerialPort sp) {
-        if (sp.isOpen()) {
-            System.out.println("Serial Port is currently in use! Try Again.");
-            System.exit(1);
-        } else {
-            sp.openPort();
-        }
-    } 
             
     public boolean GET_CommunicationIsSuccessful() {
         return this.CommunicationSuccessful;
     }
 
-    public void SET_TRUE_CommunicationIsSuccessful() {
+    private void SET_TRUE_CommunicationIsSuccessful() {
         this.CommunicationSuccessful = true;
     }
 
-    public void SET_FALSE_CommunicationIsSuccessful() {
+    private void SET_FALSE_CommunicationIsSuccessful() {
         this.CommunicationSuccessful = false;
     }
 
+    public void CommuncationReportToSupervisor(boolean status) {
+        if (status) SET_TRUE_CommunicationIsSuccessful();
+        else SET_FALSE_CommunicationIsSuccessful();
+    }
+
     public InputStream GET_InputStream() {
-        return this.SerialPortInputStream;
+        try {
+            if (SerialPortReportFromSupervisor()) {
+                return this.SerialPortInputStream;
+            }
+        } catch (Exception e) {
+            System.out.println(GetClassName.THIS_CLASSNAME(this, e.getMessage()));
+        }
+        return this.SerialPortInputStream; // can't get around that
     }
 
     public OutputStream GET_OutputStream() {
-        return this.SerialPortOutputStream;
+        try {
+            if (SerialPortReportFromSupervisor()) {
+                return this.SerialPortOutputStream;
+            }
+        } catch (Exception e) {
+            System.out.println(GetClassName.THIS_CLASSNAME(this, e.getMessage()));
+        }
+        return this.SerialPortOutputStream; // can't get around that
     }
 
-    public void SET_InputStream(InputStream is) {
-        this.SerialPortInputStream = is;
-    }
-
-    public void SET_OutputStream(OutputStream os) {
-        this.SerialPortOutputStream = os;
-    }
-
-    public SerialPort GET_OpenSerialPort() {
-        if (this.OpenSerialPort.isOpen()) return this.OpenSerialPort;
-        else {
-            System.out.println("SerialPort is not open! Attempted to GET");
-            System.exit(1);
-            return this.OpenSerialPort;
+    public void IOStreamsReportToSuperVisor() {
+        try {
+            if (SerialPortReportFromSupervisor()) {
+                SET_InputStream(GET_OpenSerialPort().getInputStream());
+                SET_OutputStream(GET_OpenSerialPort().getOutputStream());
+            }
+        } catch (Exception e) {
+            System.out.println(GetClassName.THIS_CLASSNAME(this, e.getMessage()));
         }
     }
 
-    public void SET_OpenSerialPort(SerialPort sp) {
-        SerialPortReportToSupervisor(sp); // send to open by supervisor if not in use!
-        this.OpenSerialPort = sp;
+    private void SET_InputStream(InputStream is) {
+        this.SerialPortInputStream = is;
+    }
+
+    private void SET_OutputStream(OutputStream os) {
+        this.SerialPortOutputStream = os;
+    }
+
+    public boolean SerialPortReportFromSupervisor() throws SerialException {
+        if (this.OpenSerialPort.isOpen()) return true;
+        throw new SerialException(); // error opening serial port
+    }
+
+    // overloaded method to set the serialport
+    public void SerialPortReportToSupervisor(SerialPort sp) {
+        SET_OpenSerialPort(sp);
+        try {
+            if (SerialPortReportFromSupervisor()) System.out.println(GetClassName.THIS_CLASSNAME(this, "Successful assignment of Serial Port!"));
+        } catch (Exception e) {
+            System.out.println(GetClassName.THIS_CLASSNAME(this, e.getMessage()));
+        }
     }
     
+    public SerialPort GET_OpenSerialPort() {
+        try {
+            if (SerialPortReportFromSupervisor()) return this.OpenSerialPort;
+        } catch (SerialException e) {
+            System.out.println(GetClassName.THIS_CLASSNAME(this, e.getMessage()));
+        }
+        return OpenSerialPort; // can't get around that :/ java, java
+    }
+
+    private void SET_OpenSerialPort(SerialPort sp) {
+        sp.openPort();
+        this.OpenSerialPort = sp;
+    }
+
+    // here, SerialSupervisor passed the verification of hiring the serialreader for a specific job, the Communicationsupervisor will check serialport
+    // and verify that he can be added, if so, comm supervisor will add him to the serialport
+    public boolean SerialReaderReportToSupervisor() {
+        if (!this.ActiveSerialReader) return true;
+        return false;
+    };
+
+    // finally, add to the
+    public void SerialReaderReportToSupervisor(SerialReader WorkerWaitingApproval) {
+        this.GET_OpenSerialPort().addDataListener(WorkerWaitingApproval);
+        this.ActiveSerialReader = true;
+    }
+
+    // remove the data listener
+    public void RemoveSerialReaderFromLine() throws SerialException {
+        if (!this.SerialReaderReportToSupervisor()) {
+            this.GET_OpenSerialPort().removeDataListener();
+            this.ActiveSerialReader = false;
+        } else {
+            throw new SerialException("You attempted to remove a Worker from the line when one is currently not there!");
+        }
+    };
 };

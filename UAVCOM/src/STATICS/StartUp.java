@@ -2,12 +2,7 @@ package STATICS;
 
 import com.fazecast.jSerialComm.*;
 
-import EXCEPTIONS.SerialException;
-import READERS.SerialReader;
-import READERS.SerialResponseInitialize;
-
 import java.io.*;
-import java.time.Duration;
 import java.util.Properties;
 import java.util.Scanner;
 
@@ -25,43 +20,13 @@ public class StartUp {
     };
 
     // REQUIRED TO START COMMUNICATIONS
-    public static boolean VerifyMyTeensy(SerialPort sp, InputStream is, OutputStream os) throws IOException, InterruptedException, SerialException {    
-        // Create a SerialReader to wait for the expected response
-        SerialReader reader = new SerialReader(is, "-teen Java, Im awake", new SerialResponseInitialize() {
-            private boolean isTeensyResponded = false;
-            @Override
-            public void onSetupCommunicationWithTeensy(boolean isTeensyResponded) {
-                this.isTeensyResponded = isTeensyResponded;
-            }
-        });
-
-        sp.addDataListener(reader);
-
+    public static void VerifyMyTeensy(OutputStream os) throws IOException, InterruptedException {    
+        // Once here, LocalCom has already instructed ReaderSupervisor to hire a new SerialReader (verifier) to look for teensy's awake message 
         // Send a message to the serial port
         String message = "-java Teensy, are you awake?"; // -java = transmission's action for teensy to interpret, the rest will be read as a message
         os.write(message.getBytes()); // send bytes of message, as Teensy will read it this way
         os.flush(); // flush these out! Basically, make sure all is clear from buffer
-
-        // Wait for the expected response or a timeout to occur
-        long startTime = System.currentTimeMillis();
-        long elapsedTime = 0;
-        while (elapsedTime < Duration.ofMillis(5000).toMillis()) {
-            if (reader.isTeensyResponded()) {
-                System.out.println("Teensy has responded, Comms on java side is ready!");
-                sp.removeDataListener();
-                return true;
-            }
-
-            // Wait for a short period before checking again
-            Thread.sleep(Duration.ofMillis(1000).toMillis());
-            elapsedTime = System.currentTimeMillis() - startTime;
-        }
-
-        // Timeout occurred
-        System.out.println("Timeout occurred waiting for response from Teensy");
-        sp.removeDataListener();
-        return false;
-    }
+    };
 
     public static SerialPort MySerialPort() throws SerialPortIOException {
         Scanner scanner = new Scanner(System.in);

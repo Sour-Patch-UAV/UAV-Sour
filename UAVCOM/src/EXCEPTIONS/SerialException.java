@@ -9,6 +9,6 @@ public class SerialException extends Exception {
 
     // default const.
     public SerialException() {
-        this("Error with Serial Port");
+        this("Serial Port is currently in use or is not able to be accessed! Try again.");
     }
 }
