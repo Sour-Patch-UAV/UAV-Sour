@@ -24,9 +24,36 @@ public class StartUp {
         // Once here, LocalCom has already instructed ReaderSupervisor to hire a new SerialReader (verifier) to look for teensy's awake message 
         // Send a message to the serial port
         String message = "-java Teensy, are you awake?"; // -java = transmission's action for teensy to interpret, the rest will be read as a message
-        os.write(message.getBytes()); // send bytes of message, as Teensy will read it this way
-        os.flush(); // flush these out! Basically, make sure all is clear from buffer
+        try {
+            WriteToOutput(os, message);
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
     };
+
+    public static void VerifyPeripheralWorker(OutputStream os, String mvmt) throws IOException, InterruptedException {
+        // moving servos via command, want to have the servos move in some ladder movement and send back the postitions in a concat string to verify
+        String message = "-java TestServo" + mvmt;
+        try {
+            WriteToOutput(os, message);
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    };
+
+    public static void VerifyGeneralWorker(OutputStream os) {   
+        String message = "-java Teensy, this is a test message.";
+        try {
+            WriteToOutput(os, message);
+        } catch (IOException e) {
+            e.printStackTrace();
+        };
+    };
+
+    private static void WriteToOutput(OutputStream os, String msg) throws IOException {
+        os.write(msg.getBytes());
+        os.flush();
+    }
 
     public static SerialPort MySerialPort() throws SerialPortIOException {
         Scanner scanner = new Scanner(System.in);
@@ -41,5 +68,5 @@ public class StartUp {
         SerialPort sp = SerialPort.getCommPort(name);
         scanner.close();
         return sp;
-    }
-}
+    };
+};

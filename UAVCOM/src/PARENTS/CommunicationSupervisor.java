@@ -1,7 +1,6 @@
 package PARENTS;
 import java.io.InputStream;
 import java.io.OutputStream;
-import java.io.Serial;
 
 import com.fazecast.jSerialComm.SerialPort;
 
@@ -13,6 +12,7 @@ import STATICS.GetClassName;
 public class CommunicationSupervisor {
 
     private boolean CommunicationSuccessful = false;
+    private boolean PeripheralSuccessful = false;
     private boolean ActiveSerialReader = false; // states true if a reader is currently working on the line
     private SerialPort OpenSerialPort;
     private InputStream SerialPortInputStream;
@@ -25,19 +25,36 @@ public class CommunicationSupervisor {
             
     public boolean GET_CommunicationIsSuccessful() {
         return this.CommunicationSuccessful;
-    }
+    };
 
     private void SET_TRUE_CommunicationIsSuccessful() {
         this.CommunicationSuccessful = true;
-    }
+    };
 
     private void SET_FALSE_CommunicationIsSuccessful() {
         this.CommunicationSuccessful = false;
-    }
+    };
 
     public void CommuncationReportToSupervisor(boolean status) {
         if (status) SET_TRUE_CommunicationIsSuccessful();
         else SET_FALSE_CommunicationIsSuccessful();
+    };
+
+    private void SET_TRUE_PeripheralIsSuccessful() {
+        this.PeripheralSuccessful = true;
+    };
+
+    private void SET_FALSE_PeripheralIsSuccessful() {
+        this.PeripheralSuccessful = false;
+    };
+
+    public void PeripheralReportToSupervisor(boolean status) {
+        if (status) SET_TRUE_PeripheralIsSuccessful();
+        else SET_FALSE_PeripheralIsSuccessful();
+    };
+
+    public boolean GET_PeripheralIsSuccessful() {
+        return this.PeripheralSuccessful;
     }
 
     public InputStream GET_InputStream() {
@@ -49,7 +66,7 @@ public class CommunicationSupervisor {
             System.out.println(GetClassName.THIS_CLASSNAME(this, e.getMessage()));
         }
         return this.SerialPortInputStream; // can't get around that
-    }
+    };
 
     public OutputStream GET_OutputStream() {
         try {
@@ -60,7 +77,7 @@ public class CommunicationSupervisor {
             System.out.println(GetClassName.THIS_CLASSNAME(this, e.getMessage()));
         }
         return this.SerialPortOutputStream; // can't get around that
-    }
+    };
 
     public void IOStreamsReportToSuperVisor() {
         try {
@@ -71,20 +88,20 @@ public class CommunicationSupervisor {
         } catch (Exception e) {
             System.out.println(GetClassName.THIS_CLASSNAME(this, e.getMessage()));
         }
-    }
+    };
 
     private void SET_InputStream(InputStream is) {
         this.SerialPortInputStream = is;
-    }
+    };
 
     private void SET_OutputStream(OutputStream os) {
         this.SerialPortOutputStream = os;
-    }
+    };
 
     public boolean SerialPortReportFromSupervisor() throws SerialException {
         if (this.OpenSerialPort.isOpen()) return true;
         throw new SerialException(); // error opening serial port
-    }
+    };
 
     // overloaded method to set the serialport
     public void SerialPortReportToSupervisor(SerialPort sp) {
@@ -94,7 +111,7 @@ public class CommunicationSupervisor {
         } catch (Exception e) {
             System.out.println(GetClassName.THIS_CLASSNAME(this, e.getMessage()));
         }
-    }
+    };
     
     public SerialPort GET_OpenSerialPort() {
         try {
@@ -103,12 +120,12 @@ public class CommunicationSupervisor {
             System.out.println(GetClassName.THIS_CLASSNAME(this, e.getMessage()));
         }
         return OpenSerialPort; // can't get around that :/ java, java
-    }
+    };
 
     private void SET_OpenSerialPort(SerialPort sp) {
         sp.openPort();
         this.OpenSerialPort = sp;
-    }
+    };
 
     // here, SerialSupervisor passed the verification of hiring the serialreader for a specific job, the Communicationsupervisor will check serialport
     // and verify that he can be added, if so, comm supervisor will add him to the serialport
@@ -121,7 +138,7 @@ public class CommunicationSupervisor {
     public void SerialReaderReportToSupervisor(SerialReader WorkerWaitingApproval) {
         this.GET_OpenSerialPort().addDataListener(WorkerWaitingApproval);
         this.ActiveSerialReader = true;
-    }
+    };
 
     // remove the data listener
     public void RemoveSerialReaderFromLine() throws SerialException {

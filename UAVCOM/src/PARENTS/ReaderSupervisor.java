@@ -24,38 +24,61 @@ public class ReaderSupervisor {
     };
 
     // this method will hire the initial verifier worker for the line and will have them look for their pickup
-    public void HIRE_VERIFIER(boolean persist, int timeout) {
-        this.ExpectedWorkerPickUp = "-teen Java, Im awake"; // teensy will respond with this on startup
+    public void HIRE_VERIFIER(String pickup, boolean persist, int timeout) {
+        this.ExpectedWorkerPickUp = pickup; // teensy will respond with this on startup (expected, strict)
         this.SupervisedWorker = new SerialReader(this, this.BossOfReaderSupervisor.GET_InputStream(), new SerialResponseInitialize() {
             @Override
             public void onSetupCommunicationWithTeensy(boolean isTeensyResponded) {
                 if (isTeensyResponded) System.out.println(GetClassName.THIS_CLASSNAME(this, "RECIEVED COMMS VERIFICATION FROM SERIAL READER SUPERVISOR"));
             }
-        }, persist, timeout);
+        }, persist, timeout, true);
         
-        // reader supervisor states, hey, I want to add this worker to the line for this job!
-        // commsupervisor checks the serialport is open still
-        // add to datalistener
-        if (this.BossOfReaderSupervisor.SerialReaderReportToSupervisor()) this.BossOfReaderSupervisor.SerialReaderReportToSupervisor(SupervisedWorker);
+        CHECK_WORKER_NEEDED();
     };
 
     // this will create a general worker for the line, will handle sending the information from the simulation to the teensy through the port
     public void HIRE_GENERAL(boolean persist, int timeout) {
+        this.ExpectedWorkerPickUp = "-teen"; // now, look for teensy's responses!
+        this.SupervisedWorker = new SerialReader(this, this.BossOfReaderSupervisor.GET_InputStream(), new SerialResponseInitialize() {
+            @Override
+            public void onSetupCommunicationWithTeensy(boolean isTeensyResponded) {
+                if (isTeensyResponded) System.out.println("RECIEVED COMMS FROM TEENSY");
+            }
+        }, persist, timeout, false);
         
-    }
+        CHECK_WORKER_NEEDED();
+    };
 
-    public boolean CHECK_PICKUP(SerialResponseInitialize ListenerResponse, String pickup) {
+    // reader supervisor states, hey, I want to add this worker to the line for this job!
+    // commsupervisor checks the serialport is open still
+    // add to datalistener
+    private void CHECK_WORKER_NEEDED() {
+        if (this.BossOfReaderSupervisor.SerialReaderReportToSupervisor()) this.BossOfReaderSupervisor.SerialReaderReportToSupervisor(SupervisedWorker);
+    };
+
+    // worker for specific purpose
+    public void CHECK_STRICT_PICKUP(SerialResponseInitialize ListenerResponse, String pickup) {
         if (pickup.trim().equals(this.ExpectedWorkerPickUp)) {
             this.BossOfReaderSupervisor.CommuncationReportToSupervisor(true);
             ListenerResponse.onSetupCommunicationWithTeensy(this.CHECK_PICKUP());
             REMOVE_WORKER(); // clock worker out
         }
-        return false;
-    }
+    };
+
+    // general worker pickup check
+    public void CHECK_LOOSE_PICKUP(SerialResponseInitialize ListenerResponse, String pickup) {
+        if (pickup.contains(this.ExpectedWorkerPickUp)) {
+            this.BossOfReaderSupervisor.CommuncationReportToSupervisor(true);
+            ListenerResponse.onSetupCommunicationWithTeensy(this.CHECK_PICKUP());
+        } else {
+            this.BossOfReaderSupervisor.CommuncationReportToSupervisor(false); // set communication was not a successful pickup
+            ListenerResponse.onSetupCommunicationWithTeensy(this.CHECK_PICKUP());
+        }
+    };
 
     public boolean CHECK_PICKUP() {
         return this.BossOfReaderSupervisor.GET_CommunicationIsSuccessful();
-    }
+    };
 
     // this will remove the worker from the line upon successful pickup
     private void REMOVE_WORKER() {
@@ -65,11 +88,11 @@ public class ReaderSupervisor {
         } catch (SerialException e) {
             System.out.println(GetClassName.THIS_CLASSNAME(this, e.getMessage()));
         }
-    }
+    };
 
     // reset worker position for cleanup of this class!
     private void OPEN_POSITION() {
         this.ExpectedWorkerPickUp = "";
         this.SupervisedWorker = null;
-    }
-}
+    };
+};
