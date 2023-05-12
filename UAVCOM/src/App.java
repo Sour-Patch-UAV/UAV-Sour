@@ -31,12 +31,12 @@ public class App {
             Thread.sleep(500); // let's wait!
         };
 
-        System.out.println("Communication Supervisor states system is ready?: " + LocalCommunication.GET_CommunicationIsSuccessful());
+        System.out.println("Communication Supervisor states communications are OK?: " + LocalCommunication.GET_CommunicationIsSuccessful());
 
         // now, send some test data to verify the general worker is working correctly!
         try {
             // the serial worker WILL expect what is in here, can be altered to test for separate areas of effort
-            LocalCommunication.Verify_Peripheral("8,12,16,22,5");
+            LocalCommunication.Verify_Peripheral("8,12,16,22,6");
         } catch (IOException e) {
             System.out.println("ERROR: " + e.getMessage());
         }

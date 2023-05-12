@@ -14,7 +14,7 @@ const uint8_t testServo[] = {32, 84, 101, 115, 116, 83, 101, 114, 118, 111};
 // hello teensy is = -java Teensy, are you awake?
 const uint8_t helloTeensy[] = {32, 84, 101, 101, 110, 115, 121, 44, 32, 97, 114, 101, 32, 121, 111, 117, 32, 97, 119, 97, 107, 101, 63};
 const uint8_t PRE_JAVA[] = {45, 106, 97, 118, 97}; // states -java
-bool programready = false; // initialize pr (Program Ready) boolean to false
+bool commready = false; // initialize pr (comms Ready) boolean to false
 bool peripheralready = false; // init periph. boolean to false
 
 const int DEFAULT_SERVO_ANGLE = 500;
@@ -61,7 +61,7 @@ void VERIFY(size_t i) {
   // -java, init com to verify communcation :)
   if (memcmp(buffer, helloTeensy, sizeof(helloTeensy)) == 0) {
     Serial3.println("Verified COM w/ JAVA");
-    programready = true; // set programReady to true if the message is "Hello, Teensy"
+    commready = true; // set commready to true if the message is "Hello, Teensy"
     Serial.write("-teen Java, Im awake");
   }
   else if (memcmp(buffer, testServo, sizeof(testServo)) == 0) {
@@ -109,10 +109,10 @@ string TestServo() {
     for (size_t j = 0; j < mvmt.size(); j++) {
       int ms = mvmt.at(j);
       ms *= 100;
-      returnmessage += to_string(ms); // add for the return message
       // send to move for real feedback
-      delay(1000);
+      delay(500);
       MoveServo(servos, ms);
+      returnmessage += to_string(servos.readMicroseconds()); // add for the return message
     }
     return returnmessage;
   }
@@ -138,12 +138,17 @@ void loop() {
     }
     // this is a message from java, don't look at teensy!
     if (memcmp(actionBytes, PRE_JAVA, sizeof(PRE_JAVA)) == 0) {
-      if (programready && peripheralready) TRANSLATE(i);
-      if (programready && !peripheralready) VERIFY(i);
-      if (!programready) VERIFY(i);
+      if (commready && peripheralready) TRANSLATE(i);
+      if (commready && !peripheralready) VERIFY(i);
+      if (!commready) VERIFY(i);
     }
     CLEANBUF();
   }
   delay(1000);
-  Serial3.println("Teensy is board...");
+
+  Serial3.println("--------------------------------");
+  Serial3.print("Comms Ready? " ); Serial3.println(commready);
+  Serial3.println("--------------------------------");
+  Serial3.print("Peripheral Ready? " ); Serial3.println(peripheralready);
+  Serial3.println("--------------------------------");
 }

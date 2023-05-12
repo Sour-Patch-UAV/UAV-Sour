@@ -55,7 +55,7 @@ public class CommunicationSupervisor {
 
     public boolean GET_PeripheralIsSuccessful() {
         return this.PeripheralSuccessful;
-    }
+    };
 
     public InputStream GET_InputStream() {
         try {
