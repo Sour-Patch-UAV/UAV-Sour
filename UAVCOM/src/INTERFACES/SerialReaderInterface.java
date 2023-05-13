@@ -1,4 +1,4 @@
-package READERS;
+package INTERFACES;
 
 import com.fazecast.jSerialComm.SerialPortEvent;
 

@@ -26,6 +26,34 @@ The classes are ordered based on their respective hierarchy and contribution.
 - [Local Communication "LOCALCOM"](https://github.com/Sour-Patch-UAV/UAV-Sour/blob/main/UAVCOM/src/COMS/LOCALCOM.java)
     -   This is a very essential class file as it handles the communication between the Teensy controller and the rest of the software. Additionally, this class contains methods that handle the initial functionality for verifying that Java can communicate with the Teensy controller.
 
+#### *Managing Commands & Instructions to Microcontroller*
+- [InstructionManagement](https://github.com/Sour-Patch-UAV/UAV-Sour/blob/main/UAVCOM/src/STATICS/InstructionManagement.java)
+    - This class contains almost all of the static methods and handling for the [SHELL](https://github.com/Sour-Patch-UAV/UAV-Sour/blob/main/UAVCOM/src/SHELL/Shell.java) instance, which is responsible for handling user input. The input can range from listing the user's previous actions (commands), exiting the shell, and writing various instructions to the microcontroller to perform the desired action. The Instruction Management class provides methods that verify the command and instruction are valid. It also contains various helper methods for the user to print all the shell commands or perform a predefined test instruction set on the microcontroller.
+- [Shell](https://github.com/Sour-Patch-UAV/UAV-Sour/blob/main/UAVCOM/src/SHELL/Shell.java)
+    - This class is specifically there if the user chooses to manually input instruction to the microcontroller. This class will handle the input from the console, and pass it to an instruction management class. The user can enter various functions to specifically move some servo, set power to a motor, or talk to the transmitter on board.
+
+##### **_Instruction Format_**
+> - **Command Name**
+>   - Description
+
+---
+
+    quit : exits the shell
+    help : prints all commands
+    test : sends out sample instructions to the microcontroller
+
+    ---------------------------
+    The following commands require extra instructions
+    ---------------------------
+
+    xaxis* : instruction to move aileron to angle (rads) -> xaxis 40
+    yaxis* : instruction to move elevator to angle (rads) -> yaxis 30
+    thrust* : instruction to set power of motor(s) to number -> thrust 45
+    talk : instruction to send a message to the microcontroller and expect it back -> talk -java "this is a message"
+
+###### Commands followed by * can also accept multiple instructions -> thrust 30,40,50,60,90,0 OR xaxis 20,30,40,45,0
+
+
 #### *Setup Methods for SerialPort and Initial Verification*
 - [MySerialPort](https://github.com/Sour-Patch-UAV/UAV-Sour/blob/main/UAVCOM/src/STATICS/StartUp.java#L58)
     - This static method reads input from the user and returns a SerialPort object specified with the name, the port should be the same as the Teensy's. The software is intelligent enough to verify that the port exists and is not already open by another process. The creation of SerialPort objects is provided by [jSerialComm](https://fazecast.github.io/jSerialComm/).

@@ -52,7 +52,7 @@ public class ReaderSupervisor {
 
     // this will create a general worker for the line, will handle sending the information from the simulation to the teensy through the port
     public void HIRE_GENERAL(boolean persist, int timeout) {
-        this.ExpectedWorkerPickUp = "-teen"; // now, look for teensy's responses!
+        this.ExpectedWorkerPickUp = Definitions.TEENSYRESPONSE; // now, look for teensy's responses!
         this.SupervisedWorker = new SerialReader(this, this.BossOfReaderSupervisor.GET_InputStream(), new SerialResponseForGeneral() {
             @Override
             public void onResponseFromTeensy(boolean isTeensyResponded) {
@@ -72,7 +72,7 @@ public class ReaderSupervisor {
 
     // worker for specific purpose
     public void CHECK_STRICT_PICKUP(SerialResponseForCommunication ListenerResponse, String pickup) {
-        if (StartUp.CheckResponse_STRICT(pickup, this.ExpectedWorkerPickUp)) {
+        if (ResponseManagement.CheckResponse_STRICT(pickup, this.ExpectedWorkerPickUp)) {
             this.BossOfReaderSupervisor.CommuncationReportToSupervisor(true);
             ListenerResponse.onSetupCommunicationWithTeensy(this.CHECK_PICKUP());
             REMOVE_WORKER(); // clock worker out
@@ -81,7 +81,7 @@ public class ReaderSupervisor {
 
     // worker for specific purpose
     public void CHECK_STRICT_PICKUP(SerialResponseForPerihperal ListenerResponse, String pickup) {
-        if (StartUp.CheckPeripheralResponse(pickup, this.ExpectedWorkerPickUp)) {
+        if (ResponseManagement.CheckPeripheralResponse(pickup, this.ExpectedWorkerPickUp)) {
             this.BossOfReaderSupervisor.PeripheralReportToSupervisor(true);
             ListenerResponse.onSetupPeripheralWithTeensy(this.CHECK_PICKUP());
             REMOVE_WORKER(); // clock worker out
@@ -90,7 +90,7 @@ public class ReaderSupervisor {
     
     // general worker pickup check
     public void CHECK_LOOSE_PICKUP(SerialResponseForGeneral ListenerResponse, String pickup) {
-        if (StartUp.CheckResponse_LOOSE(pickup, this.ExpectedWorkerPickUp)) {
+        if (ResponseManagement.CheckResponse_LOOSE(pickup, this.ExpectedWorkerPickUp)) {
             this.BossOfReaderSupervisor.CommuncationReportToSupervisor(true);
         }
     };

@@ -90,12 +90,14 @@ void VERIFY(size_t i) {
     string one = "-teen ";
     string two = TestServo();
     string three = one + two;
-    Serial.write(three.c_str());
+    Serial.write(three.c_str()); // write back to java for confirmation
+    peripheralready = true;
     CLEANBUF();
     CLEANMVMT();
   };
 }
 
+// here, I will send to appropriate command and fulfill with the provided instruction
 void TRANSLATE(size_t i) {
   Serial3.println("Translating... PR IS TRUE...");
   PRINT_BUF(i);
@@ -110,7 +112,7 @@ string TestServo() {
       int ms = mvmt.at(j);
       ms *= 100;
       // send to move for real feedback
-      delay(500);
+      delay(200);
       MoveServo(servos, ms);
       returnmessage += to_string(servos.readMicroseconds()); // add for the return message
     }
@@ -136,19 +138,25 @@ void loop() {
       }
       i++; // increment the counter variable
     }
-    // this is a message from java, don't look at teensy!
-    if (memcmp(actionBytes, PRE_JAVA, sizeof(PRE_JAVA)) == 0) {
+
+    // check to see if the message is from java "-java"
+    if (check_for_java()) {
       if (commready && peripheralready) TRANSLATE(i);
-      if (commready && !peripheralready) VERIFY(i);
-      if (!commready) VERIFY(i);
+      if (!commready || !peripheralready) VERIFY(i);
     }
     CLEANBUF();
   }
   delay(1000);
-
+  if (commready) commready = false;
+  if (peripheralready) peripheralready = false;
   Serial3.println("--------------------------------");
   Serial3.print("Comms Ready? " ); Serial3.println(commready);
   Serial3.println("--------------------------------");
   Serial3.print("Peripheral Ready? " ); Serial3.println(peripheralready);
   Serial3.println("--------------------------------");
 }
+
+// check for -java <- message from java!
+bool check_for_java() {
+  return (memcmp(actionBytes, PRE_JAVA, sizeof(PRE_JAVA)) == 0);
+};

@@ -130,8 +130,8 @@ public class CommunicationSupervisor {
     // here, SerialSupervisor passed the verification of hiring the serialreader for a specific job, the Communicationsupervisor will check serialport
     // and verify that he can be added, if so, comm supervisor will add him to the serialport
     public boolean SerialReaderReportToSupervisor() {
-        if (!this.ActiveSerialReader) return true;
-        return false;
+        if (!this.ActiveSerialReader) return true; // worker is not in line
+        return false; // worker is in line
     };
 
     // finally, add to the
@@ -145,8 +145,6 @@ public class CommunicationSupervisor {
         if (!this.SerialReaderReportToSupervisor()) {
             this.GET_OpenSerialPort().removeDataListener();
             this.ActiveSerialReader = false;
-        } else {
-            throw new SerialException("You attempted to remove a Worker from the line when one is currently not there!");
-        }
+        } else throw new SerialException("You attempted to remove a Worker from the line when one is currently not there!");
     };
 };
