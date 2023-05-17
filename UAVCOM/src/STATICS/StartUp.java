@@ -23,7 +23,7 @@ public class StartUp {
     public static void VerifyMyTeensy(OutputStream os) throws IOException, InterruptedException {    
         // Once here, LocalCom has already instructed ReaderSupervisor to hire a new SerialReader (verifier) to look for teensy's awake message 
         // Send a message to the serial port
-        String message = Definitions.PRE_JAVA + Definitions.HELLOTEENSY; // -java = transmission's action for teensy to interpret, the rest will be read as a message
+        String message = Definitions.HELLOTEENSY; // -java = transmission's action for teensy to interpret, the rest will be read as a message
         try {
             Messenger.WriteToOutput(os, message);
         } catch (IOException e) {
@@ -33,7 +33,7 @@ public class StartUp {
 
     public static void VerifyPeripheralWorker(OutputStream os, String mvmt) throws IOException, InterruptedException {
         // moving servos via command, want to have the servos move in some ladder movement and send back the postitions in a concat string to verify
-        String message = Definitions.PRE_JAVA + Definitions.TESTSERVO + mvmt;
+        String message = Definitions.TESTSERVO + mvmt;
         try {
             Messenger.WriteToOutput(os, message);
         } catch (IOException e) {
@@ -42,7 +42,7 @@ public class StartUp {
     };
 
     public static void VerifyGeneralWorker(OutputStream os) {   
-        String message = Definitions.PRE_JAVA + "Teensy, this is a test message.";
+        String message = "Teensy, this is a test message.";
         try {
             Messenger.WriteToOutput(os, message);
         } catch (IOException e) {

@@ -8,6 +8,7 @@ import EXCEPTIONS.CommandException;
 import EXCEPTIONS.SerialException;
 import SHELL.Shell;
 import STATICS.Definitions;
+import STATICS.Messenger;
 import STATICS.StartUp;
 
 public class App {
@@ -86,7 +87,7 @@ public class App {
             
             switch(mode) {
                 case Definitions.MODE_SHELL:
-                    new Shell(scan); // start new shell! and recycle scanner
+                    new Shell(new Messenger(LocalCommunication.GET_OutputStream()), scan); // start new shell! and recycle scanner
                     break;
                 case Definitions.MODE_SIMULATION:
                     System.out.println("Unfortunately, our machine is down! Try again tomorrow!");

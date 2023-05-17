@@ -8,6 +8,7 @@ import EXCEPTIONS.CommandException;
 import STATICS.Definitions;
 import STATICS.GetClassName;
 import STATICS.InstructionManagement;
+import STATICS.Messenger;
 
 // this class will maintain the current conditions for the user if they choose to use the shell!
 public class Shell {
@@ -40,18 +41,20 @@ public class Shell {
     }
 
     private LinkedList<Action> listOfActions = new LinkedList<>(); // keep track of all actions by user here!
+    private Messenger messenger;
 
-    // recycle scanner
-    public Shell(Scanner scan) throws IllegalArgumentException, CommandException {
+    // recycle scanner & pass messenger object
+    public Shell(Messenger providedMessenger, Scanner scan) throws IllegalArgumentException, CommandException {
         System.out.println(GetClassName.THIS_CLASSNAME(this, "Shell successfully opened!"));
-        InstructionManagement.SEND(Definitions.HELP); // print all actionables to user!
+        this.messenger = providedMessenger;
+        InstructionManagement.PRINTALL(); // print all actionables to user!
         // upon creation, allow user to prompt for input!
         USER_PROMPT(scan);
     };
 
     public void USER_PROMPT(Scanner scan) {
         while (true) {
-            System.out.println("Total Actions: " + this.listOfActions.size());
+            System.out.println("Total Actions: " + this.listOfActions.size() + ": >> Type 'ls' or 'ls <num>' to print out previous actions!");
             System.out.print("> ");
             String input = scan.nextLine();
             if (input.equalsIgnoreCase(Definitions.QUIT)) break;
@@ -72,7 +75,7 @@ public class Shell {
                         System.out.println("Invalid input. Please try ex: ls " + (this.listOfActions.size() - 1));
                     }
                 }
-            } else if (InstructionManagement.SEND(input)) {
+            } else if (InstructionManagement.SEND(this.messenger, input)) {
                 listOfActions.add(new Action(new Date(), input)); // keeping even when error, so that the user may be able to go back and see WHY there action failed
             } else break;
         }

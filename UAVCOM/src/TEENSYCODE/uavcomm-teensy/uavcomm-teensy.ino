@@ -1,3 +1,4 @@
+// Teensy 4.0 SW
 #include <Servo.h>
 Servo servos; // global var
 
@@ -6,7 +7,7 @@ Servo servos; // global var
 #include <vector>
 
 using namespace std;
-const size_t bufferLength = 32; // define the maximum buffer length
+const size_t bufferLength = 128; // define the maximum buffer length
 uint8_t buffer[bufferLength]; // create a buffer array of bytes
 uint8_t actionBytes[5]; // create an array to store the action bytes
 // test servo is TestServo
@@ -15,10 +16,17 @@ const uint8_t testServo[] = {32, 84, 101, 115, 116, 83, 101, 114, 118, 111};
 const uint8_t helloTeensy[] = {32, 84, 101, 101, 110, 115, 121, 44, 32, 97, 114, 101, 32, 121, 111, 117, 32, 97, 119, 97, 107, 101, 63};
 const uint8_t PRE_JAVA[] = {45, 106, 97, 118, 97}; // states -java
 bool commready = false; // initialize pr (comms Ready) boolean to false
-bool peripheralready = false; // init periph. boolean to false
+bool peripheralcheck = false; // init periph. boolean to false
 
 const int DEFAULT_SERVO_ANGLE = 500;
 int angle = DEFAULT_SERVO_ANGLE;
+
+// define shell cmd vars
+const uint8_t AIRLERON = 97; //a
+const uint8_t ELEVATOR = 101; //e
+const uint8_t THRUST = 109; //m
+const uint8_t TALK = 116; //t
+const uint8_t RESET = 114; //r
 
 // servo actions as vector
 vector<int> mvmt;
@@ -29,16 +37,16 @@ void setup() {
   Serial3.begin(115200);
   pinMode(23, OUTPUT); // output to 23
   servos.attach(23);
-}
+};
 
 void CLEANBUF() {
   memset(actionBytes, 0, sizeof(actionBytes));
   memset(buffer, 0, sizeof(buffer));
-}
+};
 
 void CLEANMVMT() {
   mvmt.clear();
-}
+};
 
 void PRINT_BUF(size_t i) {
   // loop through the stored bytes
@@ -53,7 +61,7 @@ void PRINT_BUF(size_t i) {
     Serial3.print(actionBytes[j]); // print each byte to the Serial Monitor
     Serial3.print(" "); // add a space between each byte
   }
-}
+};
 
 void VERIFY(size_t i) {
   Serial3.println("Attempting to Verify Java message.");
@@ -91,18 +99,26 @@ void VERIFY(size_t i) {
     string two = TestServo();
     string three = one + two;
     Serial.write(three.c_str()); // write back to java for confirmation
-    peripheralready = true;
+    peripheralcheck = true;
     CLEANBUF();
     CLEANMVMT();
   };
-}
+};
 
 // here, I will send to appropriate command and fulfill with the provided instruction
 void TRANSLATE(size_t i) {
-  Serial3.println("Translating... PR IS TRUE...");
+  Serial3.println("Translating...");
   PRINT_BUF(i);
+
+  // look at first letter: a = aileron, m = motor, e = elevator, t - transmitter
+  // once letter is acknowledged, run the specific method :)
+  for (size_t j = 0; j < i-5; j++) {
+    Serial3.print(buffer[j]); // print each byte to the Serial Monitor
+    Serial3.print(" "); // add a space between each byte
+  };
+
   CLEANBUF();
-}
+};
 
 // returns a string of concat info from the location of the servo
 string TestServo() {
@@ -119,12 +135,12 @@ string TestServo() {
     return returnmessage;
   }
   return "no mvmt";
-}
+};
 
 void MoveServo(Servo s, int ms) {
   Serial3.print("Moving Servo to ms: "); Serial3.println(to_string(ms).c_str());
   s.writeMicroseconds(ms);
-}
+};
 
 void loop() {
   // put your main code here, to run repeatedly:
@@ -141,20 +157,19 @@ void loop() {
 
     // check to see if the message is from java "-java"
     if (check_for_java()) {
-      if (commready && peripheralready) TRANSLATE(i);
-      if (!commready || !peripheralready) VERIFY(i);
+      if (commready && peripheralcheck) TRANSLATE(i);
+      if (!commready || !peripheralcheck) VERIFY(i);
     }
     CLEANBUF();
   }
   delay(1000);
-  if (commready) commready = false;
-  if (peripheralready) peripheralready = false;
+
   Serial3.println("--------------------------------");
   Serial3.print("Comms Ready? " ); Serial3.println(commready);
   Serial3.println("--------------------------------");
-  Serial3.print("Peripheral Ready? " ); Serial3.println(peripheralready);
+  Serial3.print("Peripheral Ready? " ); Serial3.println(peripheralcheck);
   Serial3.println("--------------------------------");
-}
+};
 
 // check for -java <- message from java!
 bool check_for_java() {
