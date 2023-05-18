@@ -14,6 +14,6 @@ public class Definitions {
     public static final String HELLOTEENSY = "Teensy, are you awake?";
     public static final String TEENSYRESPONSE = "-teen ";
     public static final String PRE_JAVA = "-java ";
-    public static final String TESTSERVO = "TestServo";
+    public static final String TESTSERVO = "TestServo ";
     public static final String LIST = "ls";
 };

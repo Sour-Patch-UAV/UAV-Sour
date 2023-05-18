@@ -35,7 +35,7 @@ public class InstructionManagement {
         System.out.println("---------------------------");
         System.out.println("-----PLEASE DO NOT USE SHELL WHILE THE PLANE IS FLYING-----");
         System.out.println(
-            "quit : exits the shell\nhelp : prints all commands\ntest : sends out sample instructions to the microcontroller\n---------------------------\nThe following commands require extra instructions\n---------------------------\nxaxis* : instruction to move aileron to angle (rads) -> xaxis 40\nyaxis* : instruction to move elevator to angle (rads) -> yaxis 30\nthrust* : instruction to set power of motor(s) to number -> thrust 45\ntalk : instruction to send a message to the microcontroller and expect it back -> talk -java \"this is a message\"\n**Commands followed by * can also accept multiple instructions -> thrust 30,40,50,60,90,0 OR xaxis 20,30,40,45,0"
+            "quit : exits the shell\nhelp : prints all commands\ntest : sends out sample instructions to the microcontroller\nreset: will reset peripherals and controller to default configuration\n---------------------------\nThe following commands require extra instructions\n---------------------------\nxaxis* : instruction to move aileron to angle (rads) -> xaxis 40\nyaxis* : instruction to move elevator to angle (rads) -> yaxis 30\nthrust* : instruction to set power of motor(s) to number -> thrust 45\ntalk : instruction to send a message to the microcontroller and expect it back -> talk -java \"this is a message\"\n**Commands followed by * can also accept multiple instructions -> thrust 30,40,50,60,90,0 OR xaxis 20,30,40,45,0"
         );
         System.out.println("---------------------------");
     };
@@ -63,14 +63,39 @@ public class InstructionManagement {
                 }
                 return true;
             case Definitions.XAXIS:
+                try {
+                    XAXIS(messenger, parts[1]);
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
                 return true;
             case Definitions.YAXIS:
+                try {
+                    YAXIS(messenger, parts[1]);
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
                 return true;
             case Definitions.THRUST:
+                try {
+                    THRUST(messenger, parts[1]);
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
                 return true;
-            case Definitions.TALK:
+            case Definitions.TALK: 
+                try {
+                    TALK(messenger, parts[1]);
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
                 return true;
             case Definitions.RESET:
+                try {
+                    RESET(messenger);
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
                 return true;
             default:
                 System.out.println("not sure how you got here, but failed to see the command is not expected!");
@@ -80,17 +105,55 @@ public class InstructionManagement {
 
     // this instruction will send a random instruction to the microcontroller to verify it's working
     private static void TEST(Messenger stream) throws IOException {
-        stream.WriteToOutput("a 8,12,16,22,6,10,6");
+        stream.WriteToOutput("a 6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,19,18,17,16,15,14,13,12,11,10,9,8,7,6"); // send out move aileron command
+    };
+
+    // send out the reset command byte to the microcontroller
+    private static void RESET(Messenger stream) throws IOException {
+        stream.WriteToOutput("r"); // send out reset cmd
+    };
+
+    private static void TALK(Messenger stream, String msg) throws IOException {
+        stream.WriteToOutput("t " + msg);
+    };
+
+    // send out command to specifically move the ailerons/rudder
+    private static void XAXIS(Messenger stream, String msg) throws IOException {
+        try {
+            stream.WriteToOutput(CHECK_INSTRUCTION("a ", msg));
+        } catch (CommandException e) {
+            e.printStackTrace();
+        }
+    };
+
+    // send out command to move elevator
+    private static void YAXIS(Messenger stream, String msg) throws IOException {
+        try {
+            stream.WriteToOutput(CHECK_INSTRUCTION("e ", msg));
+        } catch (CommandException e) {
+            e.printStackTrace();
+        }
+    };
+
+    // send out command to power motor up!
+    private static void THRUST(Messenger stream, String msg) throws IOException {
+        try {
+            stream.WriteToOutput(CHECK_INSTRUCTION("m ", msg));
+        } catch (CommandException e) {
+            e.printStackTrace();
+        }
     };
 
     // checks our known commands with input, if not found, throw exception
     private static boolean CHECK_CMD(String cmd) {
         return headers.contains(cmd);
-    }
+    };
 
     // checks the instruction paired with the cmd, should not continue if out of bounds
     // throw here, as the instruction MUST be within some bounds, and I don't want anyone getting hurt!
-    private static void CHECK_INSTRUCTION(String cmd, String instruction) throws CommandException {
-
-    }
+    private static String CHECK_INSTRUCTION(String cmd, String instruction) throws CommandException {
+        String mail = cmd + instruction;
+        if (mail.isEmpty()) throw new CommandException("Your command was invalid, try again!");
+        return mail;
+    };
 };

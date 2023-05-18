@@ -9,7 +9,8 @@ Servo servos; // global var
 using namespace std;
 const size_t bufferLength = 128; // define the maximum buffer length
 uint8_t buffer[bufferLength]; // create a buffer array of bytes
-uint8_t actionBytes[5]; // create an array to store the action bytes
+const size_t headerLength = 5; // starts at 5, move to 1 after readys
+uint8_t headerBytes[headerLength]; // create an array to store the header bytes | header bytes states -java ONLY
 // test servo is TestServo
 const uint8_t testServo[] = {32, 84, 101, 115, 116, 83, 101, 114, 118, 111};
 // hello teensy is = -java Teensy, are you awake?
@@ -18,17 +19,18 @@ const uint8_t PRE_JAVA[] = {45, 106, 97, 118, 97}; // states -java
 bool commready = false; // initialize pr (comms Ready) boolean to false
 bool peripheralcheck = false; // init periph. boolean to false
 
-const int DEFAULT_SERVO_ANGLE = 500;
-int angle = DEFAULT_SERVO_ANGLE;
+// aileron angle at the moment in testing!!
+const int DEFAULT_AILERON_ANGLE = 500;
+int angle = DEFAULT_AILERON_ANGLE;
 
 // define shell cmd vars
-const uint8_t AIRLERON = 97; //a
+const uint8_t AILERON = 97; //a
 const uint8_t ELEVATOR = 101; //e
 const uint8_t THRUST = 109; //m
 const uint8_t TALK = 116; //t
 const uint8_t RESET = 114; //r
 
-// servo actions as vector
+// servo headers as vector
 vector<int> mvmt;
 
 void setup() {
@@ -39,8 +41,13 @@ void setup() {
   servos.attach(23);
 };
 
+void CLEANUP() {
+  CLEANBUF();
+  CLEANMVMT();
+}
+
 void CLEANBUF() {
-  memset(actionBytes, 0, sizeof(actionBytes));
+  memset(headerBytes, 0, sizeof(headerBytes));
   memset(buffer, 0, sizeof(buffer));
 };
 
@@ -50,15 +57,15 @@ void CLEANMVMT() {
 
 void PRINT_BUF(size_t i) {
   // loop through the stored bytes
-  for (size_t j = 0; j < i-5; j++) {
+  for (size_t j = 0; j < i-headerLength; j++) {
     Serial3.print(buffer[j]); // print each byte to the Serial Monitor
     Serial3.print(" "); // add a space between each byte
   }
   Serial3.println(); // add a newline at the end of the printed bytes
-  // print the action bytes to the Serial Monitor
-  Serial3.print("Action: ");
-  for (size_t j = 0; j < 5; j++) {
-    Serial3.print(actionBytes[j]); // print each byte to the Serial Monitor
+  // print the header bytes to the Serial Monitor
+  Serial3.print("Header: ");
+  for (size_t j = 0; j < headerLength; j++) {
+    Serial3.print(headerBytes[j]); // print each byte to the Serial Monitor
     Serial3.print(" "); // add a space between each byte
   }
 };
@@ -66,19 +73,17 @@ void PRINT_BUF(size_t i) {
 void VERIFY(size_t i) {
   Serial3.println("Attempting to Verify Java message.");
   PRINT_BUF(i);
-  // -java, init com to verify communcation :)
   if (memcmp(buffer, helloTeensy, sizeof(helloTeensy)) == 0) {
     Serial3.println("Verified COM w/ JAVA");
-    commready = true; // set commready to true if the message is "Hello, Teensy"
+    commready = true; // set commready to true if the message is expected one
     Serial.write("-teen Java, Im awake");
   }
   else if (memcmp(buffer, testServo, sizeof(testServo)) == 0) {
-    Serial3.println("Got a command to test out Servos!");
-    int start = (sizeof(actionBytes) + sizeof(testServo)) - 5;
+    int start = (sizeof(headerBytes) + sizeof(testServo)) - headerLength;
     string num;
     for (size_t j = start; j < sizeof(buffer); j++) {
       if (buffer[j] != 0 && buffer[j] != 44) {
-        num.push_back(char(buffer[j])); // print each byte to the Serial Monitor
+        num.push_back(char(buffer[j])); // push to num to concat -> 6,22 -> 6 | 2 <- 2 => 22
       } else {
         if (!num.empty()) {
           mvmt.push_back(stoi(num));
@@ -100,24 +105,45 @@ void VERIFY(size_t i) {
     string three = one + two;
     Serial.write(three.c_str()); // write back to java for confirmation
     peripheralcheck = true;
-    CLEANBUF();
-    CLEANMVMT();
+
+    // clean up
+    CLEANUP();
   };
 };
 
 // here, I will send to appropriate command and fulfill with the provided instruction
-void TRANSLATE(size_t i) {
-  Serial3.println("Translating...");
+bool TRANSLATE(size_t i) {
+  Serial3.println("Incoming Transmission...");
   PRINT_BUF(i);
-
   // look at first letter: a = aileron, m = motor, e = elevator, t - transmitter
   // once letter is acknowledged, run the specific method :)
-  for (size_t j = 0; j < i-5; j++) {
-    Serial3.print(buffer[j]); // print each byte to the Serial Monitor
-    Serial3.print(" "); // add a space between each byte
-  };
 
-  CLEANBUF();
+  // note that once we have seen the pre-java verification, we will see a space, skip, then read the first char                        act |buff 
+  // that char IS the transmission case, and will require some parameters after one more space ex: -java a 20, now let " " be "_" -> "-java_a_20", this is HOW we should see it
+  // understand too that a case with multiple parameters is possible, as follows: "-java a 6,8,9,10,11,12" where the comma will be our greatest ally!
+
+  int index = 1;// look for cmd at 1, as this will be after the first space!
+  uint8_t cmd = buffer[index];
+
+  switch(cmd) {
+    case AILERON:
+      Serial3.println("Moving AILERON(s)");
+      // store instructions into mvmt vector, and then send to appropriate method
+      index += 2;
+      FILL_MVMT_VECTOR(index); // fill vector with parameters
+      return CMD_MOVE_SERVO(servos);
+    case TALK:
+      Serial3.println("Talking Now");
+      index += 2;
+      return CMD_TALK(index);
+    case RESET:
+      Serial3.println("Reset Command");
+      // store instructions into mvmt vector, and then send to appropriate method
+      MoveServo(servos, DEFAULT_AILERON_ANGLE);
+      return true;
+    default:
+      return false;
+  };
 };
 
 // returns a string of concat info from the location of the servo
@@ -147,20 +173,25 @@ void loop() {
   if (Serial.available()) { // if some data is available to read
     size_t i = 0; // init pointer
     while (Serial.available() && i < bufferLength) { // loop through the incoming bytes
-      if (i < 5) { // if we're still reading the action bytes
-        actionBytes[i] = Serial.read(); // store the byte in the action array
+      if (i < headerLength) { // if we're still reading the header bytes
+        headerBytes[i] = Serial.read(); // store the byte in the header array
       } else { // if we're reading the rest of the message
-        buffer[i-5] = Serial.read(); // store the byte in the buffer array
+        buffer[i-headerLength] = Serial.read(); // store the byte in the buffer array
       }
       i++; // increment the counter variable
     }
 
     // check to see if the message is from java "-java"
     if (check_for_java()) {
-      if (commready && peripheralcheck) TRANSLATE(i);
+      if (commready && peripheralcheck) {
+        bool attempt = TRANSLATE(i);
+        if (attempt) Serial3.println("Successful Command!");
+        else Serial3.println("Command was not succesful!");
+      };
       if (!commready || !peripheralcheck) VERIFY(i);
     }
-    CLEANBUF();
+    // clean up
+    CLEANUP();
   }
   delay(1000);
 
@@ -173,5 +204,88 @@ void loop() {
 
 // check for -java <- message from java!
 bool check_for_java() {
-  return (memcmp(actionBytes, PRE_JAVA, sizeof(PRE_JAVA)) == 0);
+  return (memcmp(headerBytes, PRE_JAVA, sizeof(PRE_JAVA)) == 0);
+};
+
+// will look at the group and assess the movements to verify it was correct!
+bool CHECK_CMD_POST_MOVE(string postmove) {
+  if (!mvmt.empty()) { // we have things to read!
+    string checkmsg;
+    for (size_t j = 0; j < mvmt.size(); j++) {
+      int ms = mvmt.at(j);
+      ms *= 100;
+      checkmsg += to_string(ms); // add for the return message
+    }
+    
+    // clean up
+    CLEANUP();
+    string one = "-teen ";
+    string two = checkmsg;
+    string three = one + two;
+    Serial.write(three.c_str());
+    return checkmsg == postmove;
+  };
+  // unable to check mvmt, as it was cleared!
+  Serial3.println("Unable to check mvmt as it was cleared!");
+  return false;
+};
+
+// should accept some array of params and family of servos to move
+// WILL return true if post cmd check method returns true for the expected move verification!
+bool CMD_MOVE_SERVO(Servo group) {
+  if (!mvmt.empty()) { // we have things to read!
+    string returnmessage;
+    for (size_t j = 0; j < mvmt.size(); j++) {
+      int ms = mvmt.at(j);
+      ms *= 100;
+      // send to move for real feedback
+      delay(100);
+      MoveServo(servos, ms);
+      returnmessage += to_string(servos.readMicroseconds()); // add for the return message
+    }
+    return CHECK_CMD_POST_MOVE(returnmessage);
+  }
+  // unable to check mvmt, as it was cleared!
+  Serial3.println("Unable to check mvmt as it was cleared!");
+  return false;
+};
+
+bool CMD_TALK(int index) {
+  // get msg from buffer
+  if (buffer[0] != 0) {
+    int start = (sizeof(headerBytes) + index) - headerLength;
+    string message;
+    for (size_t j = start; j < sizeof(buffer); j++) {
+      message += static_cast<char>(buffer[j]);
+    }
+    string one = "-teen ";
+    string finalmsg = one + message;
+    Serial.write(finalmsg.c_str(), finalmsg.length());
+    return true;
+  }
+  // buffer was emptied before able to read
+  Serial3.println("Buffer was emptied before able to read!");
+  return false;
+};
+
+// fill mvmt vector for commands
+void FILL_MVMT_VECTOR(int index) {
+  // -java1a2(3->1,2,3)
+  int start = (sizeof(headerBytes) + index) - headerLength;
+  string num;
+  for (size_t j = start; j < sizeof(buffer); j++) {
+    if (buffer[j] != 0 && buffer[j] != 44) { // it equal to comma, skip
+      num.push_back(char(buffer[j])); // push to num to concat -> 6,22 -> 6 | 2 <- 2 => 22
+    } else {
+      if (!num.empty()) {
+        mvmt.push_back(stoi(num));
+        num.clear();
+      }
+    }
+  };
+};
+
+// returns buffer to string
+String CONVERT_UI8(uint8_t *arr) {
+  return String((char *)arr);
 };
