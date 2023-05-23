@@ -93,6 +93,7 @@ public class ReaderSupervisor {
         if (ResponseManagement.CheckResponse_LOOSE(pickup, this.ExpectedWorkerPickUp)) {
             this.BossOfReaderSupervisor.CommuncationReportToSupervisor(true);
         }
+        // System.out.print("> ");
     };
 
     public boolean CHECK_PICKUP() {

@@ -19,6 +19,7 @@ public class InstructionManagement {
         Definitions.YAXIS, // needs instruction (angle)
         Definitions.THRUST, // needs instruction (0 < pwr <= 99) greater than 0, or less than or equal to 99
         Definitions.TALK, // needs instruction (some message)
+        Definitions.STATE, // needs instruction (angle,elevation,speed) angle(rads) for bank, elevation to stay above, and speed for motor
         Definitions.RESET
     ));
 
@@ -35,7 +36,7 @@ public class InstructionManagement {
         System.out.println("---------------------------");
         System.out.println("-----PLEASE DO NOT USE SHELL WHILE THE PLANE IS FLYING-----");
         System.out.println(
-            "quit : exits the shell\nhelp : prints all commands\ntest : sends out sample instructions to the microcontroller\nreset: will reset peripherals and controller to default configuration\n---------------------------\nThe following commands require extra instructions\n---------------------------\nxaxis* : instruction to move aileron to angle (rads) -> xaxis 40\nyaxis* : instruction to move elevator to angle (rads) -> yaxis 30\nthrust* : instruction to set power of motor(s) to number -> thrust 45\ntalk : instruction to send a message to the microcontroller and expect it back -> talk -java \"this is a message\"\n**Commands followed by * can also accept multiple instructions -> thrust 30,40,50,60,90,0 OR xaxis 20,30,40,45,0"
+            "quit : exits the shell\nhelp : prints all commands\ntest : sends out sample instructions to the microcontroller\nreset: will reset peripherals to default configuration\n---------------------------\nThe following commands require extra instructions\n---------------------------\nxaxis* : instruction to move aileron to angle (rads) -> xaxis 40\nyaxis* : instruction to move elevator to angle (rads) -> yaxis 30\nthrust* : instruction to set power of motor(s) to number -> thrust 45\nstate : instruction to send new state for Teensy to maintain w/ angle(rads), elevation(m), and speed(0-99) -> state 40,500,98\ntalk : instruction to send a message to the microcontroller and expect it back -> talk \"this is a message\"\n**Commands followed by * can also accept multiple instructions -> thrust 30,40,50,60,90,0 OR xaxis 20,30,40,45,0"
         );
         System.out.println("---------------------------");
     };
@@ -83,6 +84,12 @@ public class InstructionManagement {
                     e.printStackTrace();
                 }
                 return true;
+            case Definitions.STATE:
+                try {
+                    STATE(messenger, parts[1]);
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
             case Definitions.TALK: 
                 try {
                     TALK(messenger, parts[1]);
@@ -139,6 +146,14 @@ public class InstructionManagement {
     private static void THRUST(Messenger stream, String msg) throws IOException {
         try {
             stream.WriteToOutput(CHECK_INSTRUCTION("m ", msg));
+        } catch (CommandException e) {
+            e.printStackTrace();
+        }
+    };
+
+    private static void STATE(Messenger stream, String msg) throws IOException {
+        try {
+            stream.WriteToOutput(CHECK_INSTRUCTION("s ", msg));
         } catch (CommandException e) {
             e.printStackTrace();
         }

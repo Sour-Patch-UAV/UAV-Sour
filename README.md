@@ -41,7 +41,7 @@ The classes are ordered based on their respective hierarchy and contribution.
     quit : exits the shell
     help : prints all commands
     test : sends out sample instructions to the microcontroller
-
+    reset: will reset peripherals to default configuration
     ---------------------------
     The following commands require extra instructions
     ---------------------------

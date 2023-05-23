@@ -9,6 +9,7 @@ public class Definitions {
     public static final String THRUST = "thrust";
     public static final String TALK = "talk";
     public static final String RESET = "reset";
+    public static final String STATE = "state";
     public static final String MODE_SHELL = "shell";
     public static final String MODE_SIMULATION = "simulation";
     public static final String HELLOTEENSY = "Teensy, are you awake?";

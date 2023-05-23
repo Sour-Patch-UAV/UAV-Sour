@@ -1,3 +1,12 @@
+#include <Wire.h>
+// MPU GYRO is for regulating the angle or turn sent from java
+const int MPU_ADDR = 0x68; // MPU GYRO ADDRESS
+
+// necessary vars for MPU GYRO
+int16_t accelerometer_x, accelerometer_y, accelerometer_z; // variables for accelerometer raw data
+int16_t gyro_x, gyro_y, gyro_z; // variables for gyro raw data
+int16_t temperature; // variables for temperature data
+
 // Teensy 4.0 SW
 #include <Servo.h>
 Servo servos; // global var
@@ -5,6 +14,7 @@ Servo servos; // global var
 #include <string> // stoi
 // include vector for non fixed size arr
 #include <vector>
+#include <thread>
 
 using namespace std;
 const size_t bufferLength = 128; // define the maximum buffer length
@@ -20,18 +30,24 @@ bool commready = false; // initialize pr (comms Ready) boolean to false
 bool peripheralcheck = false; // init periph. boolean to false
 
 // aileron angle at the moment in testing!!
-const int DEFAULT_AILERON_ANGLE = 500;
+const int DEFAULT_AILERON_ANGLE = 0;
 int angle = DEFAULT_AILERON_ANGLE;
+
+int STATE_ANGLE = 0;
+int STATE_ELEVATION = 0;
+int STATE_POWER = 0;
 
 // define shell cmd vars
 const uint8_t AILERON = 97; //a
 const uint8_t ELEVATOR = 101; //e
 const uint8_t THRUST = 109; //m
 const uint8_t TALK = 116; //t
+const uint8_t STATE = 115; //s
 const uint8_t RESET = 114; //r
 
 // servo headers as vector
 vector<int> mvmt;
+vector<thread> SPAWNS;
 
 void setup() {
   // put your setup code here, to run once:
@@ -39,6 +55,12 @@ void setup() {
   Serial3.begin(115200);
   pinMode(23, OUTPUT); // output to 23
   servos.attach(23);
+  // Needed for MPU GYRO
+  Wire.begin();
+  Wire.beginTransmission(MPU_ADDR); // Begins a transmission to the I2C slave (GY-521 board)
+  Wire.write(0x6B); // PWR_MGMT_1 register
+  Wire.write(0); // set to zero (wakes up the MPU-6050)
+  Wire.endTransmission(true);
 };
 
 void CLEANUP() {
@@ -111,6 +133,40 @@ void VERIFY(size_t i) {
   };
 };
 
+char tmp_str[7]; // temporary variable used in convert function
+
+char* convert_int16_to_str(int16_t i) { // converts int16 to string. Moreover, resulting strings will have the same length in the debug monitor.
+  sprintf(tmp_str, "%6d", i);
+  return tmp_str;
+}
+
+void GYRO_TRANSMISSION() {
+  Wire.beginTransmission(MPU_ADDR);
+  Wire.write(0x3B); // starting with register 0x3B (ACCEL_XOUT_H) [MPU-6000 and MPU-6050 Register Map and Descriptions Revision 4.2, p.40]
+  Wire.endTransmission(false); // the parameter indicates that the Arduino will send a restart. As a result, the connection is kept active.
+  Wire.requestFrom(MPU_ADDR, 14, true); // request a total of 7*2=14 registers
+  
+  // "Wire.read()<<8 | Wire.read();" means two registers are read and stored in the same variable
+  accelerometer_x = Wire.read()<<8 | Wire.read(); // reading registers: 0x3B (ACCEL_XOUT_H) and 0x3C (ACCEL_XOUT_L)
+  accelerometer_y = Wire.read()<<8 | Wire.read(); // reading registers: 0x3D (ACCEL_YOUT_H) and 0x3E (ACCEL_YOUT_L)
+  accelerometer_z = Wire.read()<<8 | Wire.read(); // reading registers: 0x3F (ACCEL_ZOUT_H) and 0x40 (ACCEL_ZOUT_L)
+  temperature = Wire.read()<<8 | Wire.read(); // reading registers: 0x41 (TEMP_OUT_H) and 0x42 (TEMP_OUT_L)
+  gyro_x = Wire.read()<<8 | Wire.read(); // reading registers: 0x43 (GYRO_XOUT_H) and 0x44 (GYRO_XOUT_L)
+  gyro_y = Wire.read()<<8 | Wire.read(); // reading registers: 0x45 (GYRO_YOUT_H) and 0x46 (GYRO_YOUT_L)
+  gyro_z = Wire.read()<<8 | Wire.read(); // reading registers: 0x47 (GYRO_ZOUT_H) and 0x48 (GYRO_ZOUT_L)
+  
+  // print out data
+  Serial3.print("aX = "); Serial3.print(convert_int16_to_str(accelerometer_x));
+  Serial3.print(" | aY = "); Serial3.print(convert_int16_to_str(accelerometer_y));
+  Serial3.print(" | aZ = "); Serial3.print(convert_int16_to_str(accelerometer_z));
+  // the following equation was taken from the documentation [MPU-6000/MPU-6050 Register Map and Description, p.30]
+  Serial3.print(" | tmp = "); Serial3.print(temperature/340.00+36.53);
+  Serial3.print(" | gX = "); Serial3.print(convert_int16_to_str(gyro_x));
+  Serial3.print(" | gY = "); Serial3.print(convert_int16_to_str(gyro_y));
+  Serial3.print(" | gZ = "); Serial3.print(convert_int16_to_str(gyro_z));
+  Serial3.println();
+};
+
 // here, I will send to appropriate command and fulfill with the provided instruction
 bool TRANSLATE(size_t i) {
   Serial3.println("Incoming Transmission...");
@@ -118,7 +174,7 @@ bool TRANSLATE(size_t i) {
   // look at first letter: a = aileron, m = motor, e = elevator, t - transmitter
   // once letter is acknowledged, run the specific method :)
 
-  // note that once we have seen the pre-java verification, we will see a space, skip, then read the first char                        act |buff 
+  // note that once we have seen the pre-java verification, we will see a space, skip, then read the first char
   // that char IS the transmission case, and will require some parameters after one more space ex: -java a 20, now let " " be "_" -> "-java_a_20", this is HOW we should see it
   // understand too that a case with multiple parameters is possible, as follows: "-java a 6,8,9,10,11,12" where the comma will be our greatest ally!
 
@@ -132,6 +188,11 @@ bool TRANSLATE(size_t i) {
       index += 2;
       FILL_MVMT_VECTOR(index); // fill vector with parameters
       return CMD_MOVE_SERVO(servos);
+    case STATE:
+      Serial3.println("Setting New State!");
+      index += 2;
+      FILL_MVMT_VECTOR(index);
+      return CMD_SET_STATE();
     case TALK:
       Serial3.println("Talking Now");
       index += 2;
@@ -184,7 +245,7 @@ void loop() {
     // check to see if the message is from java "-java"
     if (check_for_java()) {
       if (commready && peripheralcheck) {
-        bool attempt = TRANSLATE(i);
+        bool attempt = TRANSLATE(i); // if attempt is true, means, successful!
         if (attempt) Serial3.println("Successful Command!");
         else Serial3.println("Command was not succesful!");
       };
@@ -200,6 +261,10 @@ void loop() {
   Serial3.println("--------------------------------");
   Serial3.print("Peripheral Ready? " ); Serial3.println(peripheralcheck);
   Serial3.println("--------------------------------");
+  Serial3.println(PRINT_STATE().c_str());
+  Serial3.println("--------------------------------");
+
+  GYRO_TRANSMISSION();
 };
 
 // check for -java <- message from java!
@@ -250,6 +315,28 @@ bool CMD_MOVE_SERVO(Servo group) {
   return false;
 };
 
+bool CMD_SET_STATE() {
+  if (!mvmt.empty()) {
+    STATE_ANGLE = mvmt.at(0);
+    STATE_ELEVATION = mvmt.at(1);
+    STATE_POWER = mvmt.at(2);
+    // convert to string and send back!
+    string one = "-teen ";
+    string msg = one + PRINT_STATE();
+    CLEANUP();
+    Serial.write(msg.c_str());
+    return true;
+  };
+  Serial3.println("Unable to check mvmt as it was cleared!");
+  return false;
+};
+
+string PRINT_STATE() {
+  string cs = "CURRENT STATE -> ";
+  string msg = cs + "Angle: " + to_string(STATE_ANGLE) + " | Elevation: " + to_string(STATE_ELEVATION) + " | Power: " + to_string(STATE_POWER) + " | Spawn Count: " + to_string(SPAWNS.size());
+  return msg;
+};
+
 bool CMD_TALK(int index) {
   // get msg from buffer
   if (buffer[0] != 0) {
@@ -260,6 +347,7 @@ bool CMD_TALK(int index) {
     }
     string one = "-teen ";
     string finalmsg = one + message;
+    CLEANUP();
     Serial.write(finalmsg.c_str(), finalmsg.length());
     return true;
   }
