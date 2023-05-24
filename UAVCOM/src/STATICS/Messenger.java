@@ -26,4 +26,4 @@ public class Messenger {
     private static String appendMessage(String msg) {
         return Definitions.PRE_JAVA + msg;
     } 
-}
+};

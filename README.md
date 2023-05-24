@@ -49,6 +49,7 @@ The classes are ordered based on their respective hierarchy and contribution.
     xaxis* : instruction to move aileron to angle (rads) -> xaxis 40
     yaxis* : instruction to move elevator to angle (rads) -> yaxis 30
     thrust* : instruction to set power of motor(s) to number -> thrust 45
+    state* : instruction to send new state for Teensy to maintain w/ angle(rads), elevation(m), and speed(0-99) -> state 40,500,98
     talk : instruction to send a message to the microcontroller and expect it back -> talk -java "this is a message"
 
 ###### Commands followed by * can also accept multiple instructions -> thrust 30,40,50,60,90,0 OR xaxis 20,30,40,45,0

@@ -14,7 +14,8 @@ Servo servos; // global var
 #include <string> // stoi
 // include vector for non fixed size arr
 #include <vector>
-#include <thread>
+#include <thread> // thread for servo management during state based requests
+#include <queue> // queue data structure in the event more data is received from the Serial, and the current is not complete
 
 using namespace std;
 const size_t bufferLength = 128; // define the maximum buffer length
@@ -230,7 +231,6 @@ void MoveServo(Servo s, int ms) {
 };
 
 void loop() {
-  // put your main code here, to run repeatedly:
   if (Serial.available()) { // if some data is available to read
     size_t i = 0; // init pointer
     while (Serial.available() && i < bufferLength) { // loop through the incoming bytes
@@ -264,6 +264,14 @@ void loop() {
   Serial3.println(PRINT_STATE().c_str());
   Serial3.println("--------------------------------");
 
+  // code for send information back to java for reading!
+  // if (commready && peripheralcheck) {
+  //   // write to java for most current readings!
+  //   string one = "-teen ";
+  //   string msg = one + PRINT_STATE();
+  //   Serial.write(msg.c_str());
+  // };
+ 
   GYRO_TRANSMISSION();
 };
 
@@ -320,11 +328,7 @@ bool CMD_SET_STATE() {
     STATE_ANGLE = mvmt.at(0);
     STATE_ELEVATION = mvmt.at(1);
     STATE_POWER = mvmt.at(2);
-    // convert to string and send back!
-    string one = "-teen ";
-    string msg = one + PRINT_STATE();
     CLEANUP();
-    Serial.write(msg.c_str());
     return true;
   };
   Serial3.println("Unable to check mvmt as it was cleared!");
