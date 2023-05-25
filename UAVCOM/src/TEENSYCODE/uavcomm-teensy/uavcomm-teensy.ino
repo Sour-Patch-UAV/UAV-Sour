@@ -1,4 +1,6 @@
+#include <TeensyThreads.h> // creates global "threads" var
 #include <Wire.h>
+#include <sys/time.h> // for timing functions
 // MPU GYRO is for regulating the angle or turn sent from java
 const int MPU_ADDR = 0x68; // MPU GYRO ADDRESS
 
@@ -6,6 +8,7 @@ const int MPU_ADDR = 0x68; // MPU GYRO ADDRESS
 int16_t accelerometer_x, accelerometer_y, accelerometer_z; // variables for accelerometer raw data
 int16_t gyro_x, gyro_y, gyro_z; // variables for gyro raw data
 int16_t temperature; // variables for temperature data
+float dt = 0.01;  // Initial time interval for integration (in seconds)
 
 // Teensy 4.0 SW
 #include <Servo.h>
@@ -14,7 +17,7 @@ Servo servos; // global var
 #include <string> // stoi
 // include vector for non fixed size arr
 #include <vector>
-#include <thread> // thread for servo management during state based requests
+#include <pthread.h> // thread for servo management during state based requests
 #include <queue> // queue data structure in the event more data is received from the Serial, and the current is not complete
 
 using namespace std;
@@ -46,9 +49,21 @@ const uint8_t TALK = 116; //t
 const uint8_t STATE = 115; //s
 const uint8_t RESET = 114; //r
 
-// servo headers as vector
+// movement vectors as request by commands
 vector<int> mvmt;
-vector<thread> SPAWNS;
+
+// threads
+const int MAX_THREADS = 3;
+int SPAWNS[MAX_THREADS];  // Array to hold the thread objects
+
+// Declare the argument structure to pass multiple arguments to the thread
+struct ThreadArgs {
+  Servo* servos;
+  int threadId;
+};
+
+// necessary functions for threads
+void* Watch_My_Servos(void* arg);
 
 void setup() {
   // put your setup code here, to run once:
@@ -62,6 +77,69 @@ void setup() {
   Wire.write(0x6B); // PWR_MGMT_1 register
   Wire.write(0); // set to zero (wakes up the MPU-6050)
   Wire.endTransmission(true);
+
+  // Create the thread arguments
+  // !! GETSTATE meaning
+  //     case 0:
+  //         "EMPTY"
+  //     case 1:
+  //         "RUNNING"
+  //     case 2:
+  //         "ENDED"
+  //     case 3:
+  //        "ENDING"
+  //     case 4:
+  //        "SUSPENDED"
+  ThreadArgs aileronThreadArgs;
+  int ail_id = threads.addThread(Watch_My_Servos, &aileronThreadArgs);
+  SPAWNS[0] = ail_id; // thread count is init at 0, as the main process is 0, so we must iterate by 1 for each new thread!
+  
+  aileronThreadArgs.servos = &servos;
+  aileronThreadArgs.threadId = Thread_ID(0); // set thread args to be the id of the first spawn!
+
+  // Create the Aileron thread and add to spawns array holding the threads
+  Suspend_All_Threads();
+
+  // int Elevator_Thread = 
+  // int Motor_Thread
+};
+
+// get thread ID within the spawns array
+int Thread_ID(int i) {
+  return SPAWNS[i];
+};
+
+// get the thread status
+int Thread_Status(int i) {
+  return threads.getState(Thread_ID(i));
+};
+
+// restart thread! // make awake
+int Thread_Restart(int i) {
+  Serial3.print("RESTARTING THREAD: "); Serial3.println(to_string(Thread_ID(i)).c_str());
+  return threads.restart(Thread_ID(i));
+};
+
+int Thread_Count_Running() {
+  int count = 0;
+  for (int i = 0; i < MAX_THREADS; i++) {
+    if (Thread_Status(i) != 0) {
+      if (Thread_Status(i) == 1) count++;
+    };
+  };
+  return count;
+};
+
+// put thread in suspended state
+void Thread_To_Suspend(int i) {
+  int tmp = threads.suspend(Thread_ID(i));
+};
+
+void Suspend_All_Threads() {
+  Serial3.println("---------------SUSPENDING ALL THREADS-----------------");
+  for (int i = 0; i < MAX_THREADS; i++) {
+    Thread_To_Suspend(i);
+  };
 };
 
 void CLEANUP() {
@@ -230,6 +308,11 @@ void MoveServo(Servo s, int ms) {
   s.writeMicroseconds(ms);
 };
 
+void MoveServo(Servo* s, int ms) {
+  Serial3.print("Moving Servo to ms: "); Serial3.println(to_string(ms).c_str());
+  s -> writeMicroseconds(ms);
+};
+
 void loop() {
   if (Serial.available()) { // if some data is available to read
     size_t i = 0; // init pointer
@@ -273,6 +356,9 @@ void loop() {
   // };
  
   GYRO_TRANSMISSION();
+
+  // commready = false;
+  // peripheralcheck = false;
 };
 
 // check for -java <- message from java!
@@ -323,12 +409,73 @@ bool CMD_MOVE_SERVO(Servo group) {
   return false;
 };
 
+// method for threads to adjust servos to manage the current angles
+void* Watch_My_Servos(void* arg) {
+  Serial3.println("---------------------------------HERE------------------------------");
+  struct timeval currentTime, previousTime;
+  gettimeofday(&previousTime, NULL);
+  
+  struct ThreadArgs* threadArgs = (struct ThreadArgs*)arg;
+  Servo* servo_to_adjust = threadArgs->servos;
+  int threadId = threadArgs->threadId;
+  int breaker = 0;
+  while (true) {
+    if (breaker == 10) break;
+    Serial3.print("THREAD: "); Serial3.print(threadId); Serial3.println( " currently working within method");
+    delay(1000);
+    breaker++;
+  };
+
+  // while (true) {
+  //     //Read the current angle from the gyro
+  //     float angle_x = gyro_x * dt;
+  //     float angle_y = gyro_y * dt;
+  //     float angle_z = gyro_z * dt;
+  //     Serial3.println("--------------------------------");
+  //     Serial3.print("angle_x: " ); Serial3.println(angle_x);
+  //     Serial3.println("--------------------------------");
+  //     Serial3.print("angle_y: " ); Serial3.println(angle_y);
+  //     Serial3.println("--------------------------------");
+  //     Serial3.print("angle_z: " ); Serial3.println(angle_z);
+  //     Serial3.println("--------------------------------");
+      
+  //     // for now!
+  //     int c_ms = servo_to_adjust->readMicroseconds();
+  //     c_ms++;
+  //     MoveServo(threadArgs->servos, c_ms);
+
+  //     if (servo_to_adjust->readMicroseconds() == 20) break;
+
+  //     // Calculate the elapsed time since the previous iteration
+  //     gettimeofday(&currentTime, NULL);
+  //     long elapsedMicros = (currentTime.tv_sec - previousTime.tv_sec) * 1000000 + (currentTime.tv_usec - previousTime.tv_usec);
+
+  //     // Convert the elapsed time to seconds
+  //     float elapsedSeconds = elapsedMicros / 1000000.0;
+
+  //     // Update the time interval
+  //     dt = elapsedSeconds;
+
+  //     // Store the current time for the next iteration
+  //     previousTime = currentTime;
+  // };
+
+  Suspend_All_Threads();
+  return NULL;
+};
+
 bool CMD_SET_STATE() {
   if (!mvmt.empty()) {
     STATE_ANGLE = mvmt.at(0);
     STATE_ELEVATION = mvmt.at(1);
     STATE_POWER = mvmt.at(2);
     CLEANUP();
+
+    // awake threads to look for their specific function, and maintain the angle by moving the necessary servos
+    int st = threads.getState(SPAWNS[0]);
+    Serial3.print("STATE OF AILERON THREADS: "); Serial3.println(to_string(st).c_str());
+    if (st == 4) threads.restart(SPAWNS[0]);
+    // int a = threads.start(1); // restart aileron thread so that it can maintain the aileron servos
     return true;
   };
   Serial3.println("Unable to check mvmt as it was cleared!");
@@ -337,7 +484,9 @@ bool CMD_SET_STATE() {
 
 string PRINT_STATE() {
   string cs = "CURRENT STATE -> ";
-  string msg = cs + "Angle: " + to_string(STATE_ANGLE) + " | Elevation: " + to_string(STATE_ELEVATION) + " | Power: " + to_string(STATE_POWER) + " | Spawn Count: " + to_string(SPAWNS.size());
+  int running = Thread_Count_Running();
+  int suspend = 3 - running;
+  string msg = cs + "Angle: " + to_string(STATE_ANGLE) + " | Elevation: " + to_string(STATE_ELEVATION) + " | Power: " + to_string(STATE_POWER) + " | Spawn(s) Active: " + to_string(running) + " | Spawn(s) Suspended: " + to_string(suspend);
   return msg;
 };
 
