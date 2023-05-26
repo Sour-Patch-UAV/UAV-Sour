@@ -279,6 +279,7 @@ bool TRANSLATE(size_t i) {
     case RESET:
       Serial3.println("Reset Command");
       // store instructions into mvmt vector, and then send to appropriate method
+      Suspend_All_Threads();
       MoveServo(servos, DEFAULT_AILERON_ANGLE);
       return true;
     default:
@@ -306,11 +307,6 @@ string TestServo() {
 void MoveServo(Servo s, int ms) {
   Serial3.print("Moving Servo to ms: "); Serial3.println(to_string(ms).c_str());
   s.writeMicroseconds(ms);
-};
-
-void MoveServo(Servo* s, int ms) {
-  Serial3.print("Moving Servo to ms: "); Serial3.println(to_string(ms).c_str());
-  s -> writeMicroseconds(ms);
 };
 
 void loop() {
@@ -353,9 +349,7 @@ void loop() {
   //   string one = "-teen ";
   //   string msg = one + PRINT_STATE();
   //   Serial.write(msg.c_str());
-  // };
- 
-  GYRO_TRANSMISSION();
+  // }
 
   // commready = false;
   // peripheralcheck = false;
@@ -418,12 +412,39 @@ void* Watch_My_Servos(void* arg) {
   struct ThreadArgs* threadArgs = (struct ThreadArgs*)arg;
   Servo* servo_to_adjust = threadArgs->servos;
   int threadId = threadArgs->threadId;
-  int breaker = 0;
   while (true) {
-    if (breaker == 10) break;
+    GYRO_TRANSMISSION();
     Serial3.print("THREAD: "); Serial3.print(threadId); Serial3.println( " currently working within method");
-    delay(1000);
-    breaker++;
+    delay(100);
+
+    float angle_x = gyro_y;
+    Serial3.print("CURRENT ANGLE: "); Serial3.println(to_string(angle_x).c_str());
+    int c_ms = servo_to_adjust->readMicroseconds();
+    if (angle_x < STATE_ANGLE) {
+      // angle is less, we need to move up!
+      c_ms += 100;
+      Serial3.println("------------MOVING UP--------------");
+    } else if (angle_x > STATE_ANGLE) {
+      c_ms -= 100;
+      Serial3.println("------------MOVING DOWN--------------");
+    } else {
+      Serial3.println("------------SOMEHOW STABLE--------------");
+    }
+
+    servo_to_adjust->writeMicroseconds(c_ms);
+
+    // Calculate the elapsed time since the previous iteration
+    gettimeofday(&currentTime, NULL);
+    long elapsedMicros = (currentTime.tv_sec - previousTime.tv_sec) * 1000000 + (currentTime.tv_usec - previousTime.tv_usec);
+
+    // Convert the elapsed time to seconds
+    float elapsedSeconds = elapsedMicros / 1000000.0;
+
+    // Update the time interval
+    dt = elapsedSeconds;
+
+    // Store the current time for the next iteration
+    previousTime = currentTime;
   };
 
   // while (true) {
@@ -459,8 +480,6 @@ void* Watch_My_Servos(void* arg) {
   //     // Store the current time for the next iteration
   //     previousTime = currentTime;
   // };
-
-  Suspend_All_Threads();
   return NULL;
 };
 
@@ -475,7 +494,6 @@ bool CMD_SET_STATE() {
     int st = threads.getState(SPAWNS[0]);
     Serial3.print("STATE OF AILERON THREADS: "); Serial3.println(to_string(st).c_str());
     if (st == 4) threads.restart(SPAWNS[0]);
-    // int a = threads.start(1); // restart aileron thread so that it can maintain the aileron servos
     return true;
   };
   Serial3.println("Unable to check mvmt as it was cleared!");
