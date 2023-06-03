@@ -1,18 +1,21 @@
+#include <MPU6050.h>
 #include <TeensyThreads.h> // creates global "threads" var
 #include <Wire.h>
 #include <sys/time.h> // for timing functions
 // MPU GYRO is for regulating the angle or turn sent from java
-const int MPU_ADDR = 0x68; // MPU GYRO ADDRESS
+MPU6050 mpu;
 
 // necessary vars for MPU GYRO
 int16_t accelerometer_x, accelerometer_y, accelerometer_z; // variables for accelerometer raw data
 int16_t gyro_x, gyro_y, gyro_z; // variables for gyro raw data
 int16_t temperature; // variables for temperature data
-float dt = 0.01;  // Initial time interval for integration (in seconds)
 
 // Teensy 4.0 SW
 #include <Servo.h>
 Servo servos; // global var
+const int MAX_SERVO_ANGLE = 170;
+const int MIN_SERVO_ANGLE = 10;
+const int DEFAULT_SERVO_ANGLE = 90;
 
 #include <string> // stoi
 // include vector for non fixed size arr
@@ -34,12 +37,18 @@ bool commready = false; // initialize pr (comms Ready) boolean to false
 bool peripheralcheck = false; // init periph. boolean to false
 
 // aileron angle at the moment in testing!!
-const int DEFAULT_AILERON_ANGLE = 0;
+const int DEFAULT_AILERON_ANGLE = DEFAULT_SERVO_ANGLE;
 int angle = DEFAULT_AILERON_ANGLE;
 
 int STATE_ANGLE = 0;
 int STATE_ELEVATION = 0;
 int STATE_POWER = 0;
+// Calculate tilt angles with offsets
+const float AccErrorX = 0.58;
+const float AccErrorY = -1.58;
+
+float CURR_ROLL = 0;
+float CURR_PITCH = 0;
 
 // define shell cmd vars
 const uint8_t AILERON = 97; //a
@@ -71,12 +80,32 @@ void setup() {
   Serial3.begin(115200);
   pinMode(23, OUTPUT); // output to 23
   servos.attach(23);
+  servos.write(90);
   // Needed for MPU GYRO
+  // Wire.begin();
+  // Wire.beginTransmission(MPU_ADDR); // Begins a transmission to the I2C slave (GY-521 board)
+  // Wire.write(0x6B); // PWR_MGMT_1 register
+  // Wire.write(0); // set to zero (wakes up the MPU-6050)
+  // Wire.endTransmission(true);
+  // Initialize MPU6050
   Wire.begin();
-  Wire.beginTransmission(MPU_ADDR); // Begins a transmission to the I2C slave (GY-521 board)
-  Wire.write(0x6B); // PWR_MGMT_1 register
-  Wire.write(0); // set to zero (wakes up the MPU-6050)
-  Wire.endTransmission(true);
+  mpu.initialize();
+
+  // Check initialization status
+  if (mpu.testConnection()) {
+    Serial3.println("MPU6050 initialization successful");
+  } else {
+    Serial3.println("MPU6050 initialization failed. Please check your connections.");
+  }
+
+  // calibrate sensor offsets
+  // Calibrate MPU6050
+  Serial3.println("Calibrating MPU6050...");
+  mpu.CalibrateAccel();
+  mpu.CalibrateGyro();
+  Serial3.println("Calibration complete!");
+
+  calculate_IMU_error();
 
   // Create the thread arguments
   // !! GETSTATE meaning
@@ -103,6 +132,34 @@ void setup() {
   // int Elevator_Thread = 
   // int Motor_Thread
 };
+
+void calculate_IMU_error() {
+  // We can call this function in the setup section to calculate the accelerometer data error.
+  // Place the IMU flat in order to get proper values for calibration.
+  // Read accelerometer values 200 times
+  int c = 0;
+  float AccErrorX = 0.0;
+  float AccErrorY = 0.0;
+
+  while (c < 200) {
+    mpu.getMotion6(&accelerometer_x, &accelerometer_y, &accelerometer_z, &gyro_x, &gyro_y, &gyro_z);
+    // Sum all readings
+    AccErrorX += atan2(accelerometer_y, sqrt(pow(accelerometer_x, 2) + pow(accelerometer_z, 2))) * (180.0 / PI);
+    AccErrorY += atan2(-accelerometer_x, sqrt(pow(accelerometer_y, 2) + pow(accelerometer_z, 2))) * (180.0 / PI);
+    c++;
+  }
+
+  // Divide the sum by 200 to get the error value
+  AccErrorX /= 200.0;
+  AccErrorY /= 200.0;
+  
+  // Print the error values
+  Serial3.print("AccErrorX: ");
+  Serial3.println(AccErrorX);
+  Serial3.print("AccErrorY: ");
+  Serial3.println(AccErrorY);
+}
+
 
 // get thread ID within the spawns array
 int Thread_ID(int i) {
@@ -212,37 +269,33 @@ void VERIFY(size_t i) {
   };
 };
 
-char tmp_str[7]; // temporary variable used in convert function
+// char tmp_str[7]; // temporary variable used in convert function
 
-char* convert_int16_to_str(int16_t i) { // converts int16 to string. Moreover, resulting strings will have the same length in the debug monitor.
-  sprintf(tmp_str, "%6d", i);
-  return tmp_str;
-}
+// char* convert_int16_to_str(int16_t i) { // converts int16 to string. Moreover, resulting strings will have the same length in the debug monitor.
+//   sprintf(tmp_str, "%6d", i);
+//   return tmp_str;
+// }
 
 void GYRO_TRANSMISSION() {
-  Wire.beginTransmission(MPU_ADDR);
-  Wire.write(0x3B); // starting with register 0x3B (ACCEL_XOUT_H) [MPU-6000 and MPU-6050 Register Map and Descriptions Revision 4.2, p.40]
-  Wire.endTransmission(false); // the parameter indicates that the Arduino will send a restart. As a result, the connection is kept active.
-  Wire.requestFrom(MPU_ADDR, 14, true); // request a total of 7*2=14 registers
-  
-  // "Wire.read()<<8 | Wire.read();" means two registers are read and stored in the same variable
-  accelerometer_x = Wire.read()<<8 | Wire.read(); // reading registers: 0x3B (ACCEL_XOUT_H) and 0x3C (ACCEL_XOUT_L)
-  accelerometer_y = Wire.read()<<8 | Wire.read(); // reading registers: 0x3D (ACCEL_YOUT_H) and 0x3E (ACCEL_YOUT_L)
-  accelerometer_z = Wire.read()<<8 | Wire.read(); // reading registers: 0x3F (ACCEL_ZOUT_H) and 0x40 (ACCEL_ZOUT_L)
-  temperature = Wire.read()<<8 | Wire.read(); // reading registers: 0x41 (TEMP_OUT_H) and 0x42 (TEMP_OUT_L)
-  gyro_x = Wire.read()<<8 | Wire.read(); // reading registers: 0x43 (GYRO_XOUT_H) and 0x44 (GYRO_XOUT_L)
-  gyro_y = Wire.read()<<8 | Wire.read(); // reading registers: 0x45 (GYRO_YOUT_H) and 0x46 (GYRO_YOUT_L)
-  gyro_z = Wire.read()<<8 | Wire.read(); // reading registers: 0x47 (GYRO_ZOUT_H) and 0x48 (GYRO_ZOUT_L)
-  
-  // print out data
-  Serial3.print("aX = "); Serial3.print(convert_int16_to_str(accelerometer_x));
-  Serial3.print(" | aY = "); Serial3.print(convert_int16_to_str(accelerometer_y));
-  Serial3.print(" | aZ = "); Serial3.print(convert_int16_to_str(accelerometer_z));
-  // the following equation was taken from the documentation [MPU-6000/MPU-6050 Register Map and Description, p.30]
-  Serial3.print(" | tmp = "); Serial3.print(temperature/340.00+36.53);
-  Serial3.print(" | gX = "); Serial3.print(convert_int16_to_str(gyro_x));
-  Serial3.print(" | gY = "); Serial3.print(convert_int16_to_str(gyro_y));
-  Serial3.print(" | gZ = "); Serial3.print(convert_int16_to_str(gyro_z));
+  mpu.getMotion6(&accelerometer_x, &accelerometer_y, &accelerometer_z, &gyro_x, &gyro_y, &gyro_z);
+  temperature = mpu.getTemperature();
+
+  // Convert accelerometer data to tilt angles
+  CURR_ROLL = (atan2(accelerometer_y, sqrt(pow(accelerometer_x, 2) + pow(accelerometer_z, 2))) * (180.0 / PI)) - AccErrorX;
+  CURR_PITCH = (atan2(-accelerometer_x, sqrt(pow(accelerometer_y, 2) + pow(accelerometer_z, 2))) * (180.0 / PI)) + AccErrorY;
+
+  Serial3.print("---------ROLL ANGLE----------------");
+  Serial3.println(CURR_ROLL);
+  Serial3.println("---------------------------------------");
+
+  // Print out data
+  Serial3.print("aX = "); Serial3.print(accelerometer_x);
+  Serial3.print(" | aY = "); Serial3.print(accelerometer_y);
+  Serial3.print(" | aZ = "); Serial3.print(accelerometer_z);
+  Serial3.print(" | tmp = "); Serial3.print(temperature / 340.00 + 36.53);
+  Serial3.print(" | gX = "); Serial3.print(gyro_x);
+  Serial3.print(" | gY = "); Serial3.print(gyro_y);
+  Serial3.print(" | gZ = "); Serial3.print(gyro_z);
   Serial3.println();
 };
 
@@ -280,6 +333,9 @@ bool TRANSLATE(size_t i) {
       Serial3.println("Reset Command");
       // store instructions into mvmt vector, and then send to appropriate method
       Suspend_All_Threads();
+      if (RESET_STATE()) {
+        Serial3.println("--------------STATE RESET SUCCESSFULL--------------");
+      } else Serial3.println("--------------FAILED TO RESET STATE--------------");
       MoveServo(servos, DEFAULT_AILERON_ANGLE);
       return true;
     default:
@@ -299,14 +355,20 @@ string TestServo() {
       MoveServo(servos, ms);
       returnmessage += to_string(servos.readMicroseconds()); // add for the return message
     }
+    MoveServo(servos, DEFAULT_AILERON_ANGLE);
     return returnmessage;
   }
   return "no mvmt";
 };
 
-void MoveServo(Servo s, int ms) {
-  Serial3.print("Moving Servo to ms: "); Serial3.println(to_string(ms).c_str());
-  s.writeMicroseconds(ms);
+// void MoveServo(Servo s, int ms) {
+//   Serial3.print("Moving Servo to ms: "); Serial3.println(to_string(ms).c_str());
+//   s.writeMicroseconds(ms);
+// };
+
+void MoveServo(Servo s, int angle) {
+  Serial3.print("Moving Servo to angle: "); Serial3.println(to_string(angle).c_str());
+  s.write(angle);
 };
 
 void loop() {
@@ -336,10 +398,6 @@ void loop() {
   delay(1000);
 
   Serial3.println("--------------------------------");
-  Serial3.print("Comms Ready? " ); Serial3.println(commready);
-  Serial3.println("--------------------------------");
-  Serial3.print("Peripheral Ready? " ); Serial3.println(peripheralcheck);
-  Serial3.println("--------------------------------");
   Serial3.println(PRINT_STATE().c_str());
   Serial3.println("--------------------------------");
 
@@ -360,13 +418,20 @@ bool check_for_java() {
   return (memcmp(headerBytes, PRE_JAVA, sizeof(PRE_JAVA)) == 0);
 };
 
+bool RESET_STATE() {
+  STATE_ANGLE = 0;
+  STATE_ELEVATION = 0;
+  STATE_POWER = 0;
+  return STATE_ANGLE == 0 && STATE_ELEVATION == 0 && STATE_POWER == 0;
+};
+
 // will look at the group and assess the movements to verify it was correct!
 bool CHECK_CMD_POST_MOVE(string postmove) {
   if (!mvmt.empty()) { // we have things to read!
     string checkmsg;
     for (size_t j = 0; j < mvmt.size(); j++) {
       int ms = mvmt.at(j);
-      ms *= 100;
+      // ms *= 100;
       checkmsg += to_string(ms); // add for the return message
     }
     
@@ -390,11 +455,11 @@ bool CMD_MOVE_SERVO(Servo group) {
     string returnmessage;
     for (size_t j = 0; j < mvmt.size(); j++) {
       int ms = mvmt.at(j);
-      ms *= 100;
+      // ms *= 100;
       // send to move for real feedback
       delay(100);
       MoveServo(servos, ms);
-      returnmessage += to_string(servos.readMicroseconds()); // add for the return message
+      returnmessage += to_string(servos.read()); // add for the return message
     }
     return CHECK_CMD_POST_MOVE(returnmessage);
   }
@@ -405,81 +470,30 @@ bool CMD_MOVE_SERVO(Servo group) {
 
 // method for threads to adjust servos to manage the current angles
 void* Watch_My_Servos(void* arg) {
-  Serial3.println("---------------------------------HERE------------------------------");
-  struct timeval currentTime, previousTime;
-  gettimeofday(&previousTime, NULL);
-  
   struct ThreadArgs* threadArgs = (struct ThreadArgs*)arg;
   Servo* servo_to_adjust = threadArgs->servos;
   int threadId = threadArgs->threadId;
   while (true) {
     GYRO_TRANSMISSION();
-    Serial3.print("THREAD: "); Serial3.print(threadId); Serial3.println( " currently working within method");
-    delay(100);
 
-    float angle_x = gyro_y;
-    Serial3.print("CURRENT ANGLE: "); Serial3.println(to_string(angle_x).c_str());
-    int c_ms = servo_to_adjust->readMicroseconds();
-    if (angle_x < STATE_ANGLE) {
-      // angle is less, we need to move up!
-      c_ms += 100;
-      Serial3.println("------------MOVING UP--------------");
-    } else if (angle_x > STATE_ANGLE) {
-      c_ms -= 100;
-      Serial3.println("------------MOVING DOWN--------------");
-    } else {
-      Serial3.println("------------SOMEHOW STABLE--------------");
+    int diff = abs(STATE_ANGLE - CURR_ROLL);
+
+    if (diff > 5) {
+      int c_ms = servo_to_adjust->read();
+      if (CURR_ROLL < STATE_ANGLE) {
+        // angle is less, we need to move up!
+        c_ms += 2;
+        Serial3.println("------------MOVING UP--------------");
+      } else if (CURR_ROLL > STATE_ANGLE) {
+        c_ms -= 2;
+        Serial3.println("------------MOVING DOWN--------------");
+      } else {
+        Serial3.println("------------SOMEHOW STABLE--------------");
+      }
+
+      if (c_ms >= MIN_SERVO_ANGLE && c_ms <= MAX_SERVO_ANGLE) servo_to_adjust->write(c_ms);
     }
-
-    servo_to_adjust->writeMicroseconds(c_ms);
-
-    // Calculate the elapsed time since the previous iteration
-    gettimeofday(&currentTime, NULL);
-    long elapsedMicros = (currentTime.tv_sec - previousTime.tv_sec) * 1000000 + (currentTime.tv_usec - previousTime.tv_usec);
-
-    // Convert the elapsed time to seconds
-    float elapsedSeconds = elapsedMicros / 1000000.0;
-
-    // Update the time interval
-    dt = elapsedSeconds;
-
-    // Store the current time for the next iteration
-    previousTime = currentTime;
   };
-
-  // while (true) {
-  //     //Read the current angle from the gyro
-  //     float angle_x = gyro_x * dt;
-  //     float angle_y = gyro_y * dt;
-  //     float angle_z = gyro_z * dt;
-  //     Serial3.println("--------------------------------");
-  //     Serial3.print("angle_x: " ); Serial3.println(angle_x);
-  //     Serial3.println("--------------------------------");
-  //     Serial3.print("angle_y: " ); Serial3.println(angle_y);
-  //     Serial3.println("--------------------------------");
-  //     Serial3.print("angle_z: " ); Serial3.println(angle_z);
-  //     Serial3.println("--------------------------------");
-      
-  //     // for now!
-  //     int c_ms = servo_to_adjust->readMicroseconds();
-  //     c_ms++;
-  //     MoveServo(threadArgs->servos, c_ms);
-
-  //     if (servo_to_adjust->readMicroseconds() == 20) break;
-
-  //     // Calculate the elapsed time since the previous iteration
-  //     gettimeofday(&currentTime, NULL);
-  //     long elapsedMicros = (currentTime.tv_sec - previousTime.tv_sec) * 1000000 + (currentTime.tv_usec - previousTime.tv_usec);
-
-  //     // Convert the elapsed time to seconds
-  //     float elapsedSeconds = elapsedMicros / 1000000.0;
-
-  //     // Update the time interval
-  //     dt = elapsedSeconds;
-
-  //     // Store the current time for the next iteration
-  //     previousTime = currentTime;
-  // };
   return NULL;
 };
 
