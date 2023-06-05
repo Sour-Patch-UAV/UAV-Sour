@@ -27,6 +27,7 @@ public class App {
         }
 
         try {
+            LocalCommunication.GET_OpenSerialPort().flushIOBuffers();
             LocalCommunication.Verify_Communication();
         } catch (SerialException | IOException e) {
             System.out.println("ERROR: " + e.getMessage());
@@ -42,7 +43,7 @@ public class App {
         // now, send some test data to verify the general worker is working correctly!
         try {
             // the serial worker WILL expect what is in here, can be altered to test for separate areas of effort
-            LocalCommunication.Verify_Peripheral("8,12,16,22,6");
+            LocalCommunication.Verify_Peripheral("45,10,170,90");
         } catch (IOException e) {
             System.out.println("ERROR: " + e.getMessage());
         }

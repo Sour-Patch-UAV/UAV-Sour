@@ -6,11 +6,17 @@ public class ResponseManagement {
         a = subString(a,6);
         b = subString(b, 6);
 
-        a = removeAll(a,"0", "");
+        // a = removeAll(a,"0", "");
         b = removeAll(b,",", "");
 
-        // Compare the two byte arrays
-        return a.equals(b);
+        int aNum = Integer.parseInt(a);
+        int bNum = Integer.parseInt(b);
+
+        double percentDifference = (double) Math.abs(aNum - bNum) / Math.max(aNum, bNum) * 100;
+
+        if (percentDifference <= 2.50) return true;
+        
+        return false;
     };
     
     // helper for reader supervisor, why wouldn't their job be easy?!

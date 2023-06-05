@@ -112,7 +112,13 @@ public class InstructionManagement {
 
     // this instruction will send a random instruction to the microcontroller to verify it's working
     private static void TEST(Messenger stream) throws IOException {
-        stream.WriteToOutput("a 100,110,120,130,140,150,160,170,160,150,140,130,120,110,100,90,80,70,60,50,40,30,20,10,90"); // send out move aileron command
+        stream.WriteToOutput("a 45,10,170,90"); // send out move aileron command
+        // try {
+        //     Thread.sleep(1000);
+        // } catch (InterruptedException e) {
+        //     e.printStackTrace();
+        // }
+        // stream.WriteToOutput("e 45,10,170,90");
     };
 
     // send out the reset command byte to the microcontroller

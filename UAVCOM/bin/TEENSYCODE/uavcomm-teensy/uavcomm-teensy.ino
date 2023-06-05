@@ -12,7 +12,8 @@ int16_t temperature; // variables for temperature data
 
 // Teensy 4.0 SW
 #include <Servo.h>
-Servo servos; // global var
+Servo aileron_servos; // global var
+Servo elevator_servos;
 const int MAX_SERVO_ANGLE = 170;
 const int MIN_SERVO_ANGLE = 10;
 const int DEFAULT_SERVO_ANGLE = 90;
@@ -67,20 +68,24 @@ int SPAWNS[MAX_THREADS];  // Array to hold the thread objects
 
 // Declare the argument structure to pass multiple arguments to the thread
 struct ThreadArgs {
-  Servo* servos;
+  Servo* myServo;
   int threadId;
 };
 
 // necessary functions for threads
-void* Watch_My_Servos(void* arg);
+void* Watch_My_aileron_servos(void* arg);
+void* Watch_My_elevator_serovs(void* arg);
 
 void setup() {
   // put your setup code here, to run once:
   Serial.begin(115200);
   Serial3.begin(115200);
   pinMode(23, OUTPUT); // output to 23
-  servos.attach(23);
-  servos.write(90);
+  pinMode(22, OUTPUT); // output to 22
+  aileron_servos.attach(23);
+  elevator_servos.attach(22);
+  elevator_servos.write(DEFAULT_SERVO_ANGLE);
+  aileron_servos.write(DEFAULT_SERVO_ANGLE);
   // Needed for MPU GYRO
   // Wire.begin();
   // Wire.beginTransmission(MPU_ADDR); // Begins a transmission to the I2C slave (GY-521 board)
@@ -100,12 +105,14 @@ void setup() {
 
   // calibrate sensor offsets
   // Calibrate MPU6050
-  Serial3.println("Calibrating MPU6050...");
-  mpu.CalibrateAccel();
-  mpu.CalibrateGyro();
-  Serial3.println("Calibration complete!");
+  // Serial3.println("Calibrating MPU6050...");
+  // mpu.CalibrateAccel();
+  // mpu.CalibrateGyro();
+  // Serial3.println("Calibration complete!");
 
   calculate_IMU_error();
+  Serial3.println("MPU6050 is Ready!");
+
 
   // Create the thread arguments
   // !! GETSTATE meaning
@@ -120,11 +127,18 @@ void setup() {
   //     case 4:
   //        "SUSPENDED"
   ThreadArgs aileronThreadArgs;
-  int ail_id = threads.addThread(Watch_My_Servos, &aileronThreadArgs);
+  int ail_id = threads.addThread(Watch_My_aileron_servos, &aileronThreadArgs);
   SPAWNS[0] = ail_id; // thread count is init at 0, as the main process is 0, so we must iterate by 1 for each new thread!
   
-  aileronThreadArgs.servos = &servos;
+  aileronThreadArgs.myServo = &aileron_servos;
   aileronThreadArgs.threadId = Thread_ID(0); // set thread args to be the id of the first spawn!
+
+  ThreadArgs elevatorThreadArgs;
+  int elev_id = threads.addThread(Watch_My_elevator_servos, &elevatorThreadArgs);
+  SPAWNS[1] = elev_id; // thread count is init at 0, as the main process is 0, so we must iterate by 1 for each new thread!
+  
+  elevatorThreadArgs.myServo = &elevator_servos;
+  elevatorThreadArgs.threadId = Thread_ID(1); // set thread args to be the id of the first spawn!
 
   // Create the Aileron thread and add to spawns array holding the threads
   Suspend_All_Threads();
@@ -279,24 +293,27 @@ void VERIFY(size_t i) {
 void GYRO_TRANSMISSION() {
   mpu.getMotion6(&accelerometer_x, &accelerometer_y, &accelerometer_z, &gyro_x, &gyro_y, &gyro_z);
   temperature = mpu.getTemperature();
+  delay(100);
 
   // Convert accelerometer data to tilt angles
   CURR_ROLL = (atan2(accelerometer_y, sqrt(pow(accelerometer_x, 2) + pow(accelerometer_z, 2))) * (180.0 / PI)) - AccErrorX;
   CURR_PITCH = (atan2(-accelerometer_x, sqrt(pow(accelerometer_y, 2) + pow(accelerometer_z, 2))) * (180.0 / PI)) + AccErrorY;
+  // Serial3.print("---------ROLL ANGLE----------------");
+  // Serial3.println(CURR_ROLL);
+  // Serial3.println("---------------------------------------");
+  // Serial3.print("---------PITCH ANGLE----------------");
+  // Serial3.println(CURR_PITCH);
+  // Serial3.println("---------------------------------------");
 
-  Serial3.print("---------ROLL ANGLE----------------");
-  Serial3.println(CURR_ROLL);
-  Serial3.println("---------------------------------------");
-
-  // Print out data
-  Serial3.print("aX = "); Serial3.print(accelerometer_x);
-  Serial3.print(" | aY = "); Serial3.print(accelerometer_y);
-  Serial3.print(" | aZ = "); Serial3.print(accelerometer_z);
-  Serial3.print(" | tmp = "); Serial3.print(temperature / 340.00 + 36.53);
-  Serial3.print(" | gX = "); Serial3.print(gyro_x);
-  Serial3.print(" | gY = "); Serial3.print(gyro_y);
-  Serial3.print(" | gZ = "); Serial3.print(gyro_z);
-  Serial3.println();
+  // // Print out data
+  // Serial3.print("aX = "); Serial3.print(accelerometer_x);
+  // Serial3.print(" | aY = "); Serial3.print(accelerometer_y);
+  // Serial3.print(" | aZ = "); Serial3.print(accelerometer_z);
+  // Serial3.print(" | tmp = "); Serial3.print(temperature / 340.00 + 36.53);
+  // Serial3.print(" | gX = "); Serial3.print(gyro_x);
+  // Serial3.print(" | gY = "); Serial3.print(gyro_y);
+  // Serial3.print(" | gZ = "); Serial3.print(gyro_z);
+  // Serial3.println();
 };
 
 // here, I will send to appropriate command and fulfill with the provided instruction
@@ -319,7 +336,13 @@ bool TRANSLATE(size_t i) {
       // store instructions into mvmt vector, and then send to appropriate method
       index += 2;
       FILL_MVMT_VECTOR(index); // fill vector with parameters
-      return CMD_MOVE_SERVO(servos);
+      return CMD_MOVE_SERVO(aileron_servos);
+    case ELEVATOR:
+      Serial3.println("Moving ELEVATORS(s)");
+      // store instructions into mvmt vector, and then send to appropriate method
+      index += 2;
+      FILL_MVMT_VECTOR(index); // fill vector with parameters
+      return CMD_MOVE_SERVO(elevator_servos);
     case STATE:
       Serial3.println("Setting New State!");
       index += 2;
@@ -336,7 +359,8 @@ bool TRANSLATE(size_t i) {
       if (RESET_STATE()) {
         Serial3.println("--------------STATE RESET SUCCESSFULL--------------");
       } else Serial3.println("--------------FAILED TO RESET STATE--------------");
-      MoveServo(servos, DEFAULT_AILERON_ANGLE);
+      MoveServo(aileron_servos, DEFAULT_AILERON_ANGLE);
+      MoveServo(elevator_servos, DEFAULT_SERVO_ANGLE);
       return true;
     default:
       return false;
@@ -349,13 +373,15 @@ string TestServo() {
     string returnmessage;
     for (size_t j = 0; j < mvmt.size(); j++) {
       int ms = mvmt.at(j);
-      ms *= 100;
+      // ms *= 100;
       // send to move for real feedback
       delay(200);
-      MoveServo(servos, ms);
-      returnmessage += to_string(servos.readMicroseconds()); // add for the return message
+      MoveServo(aileron_servos, ms);
+      MoveServo(elevator_servos, ms);
+      returnmessage += to_string(aileron_servos.read()); // add for the return message
     }
-    MoveServo(servos, DEFAULT_AILERON_ANGLE);
+    MoveServo(aileron_servos, DEFAULT_AILERON_ANGLE);
+    MoveServo(elevator_servos, DEFAULT_SERVO_ANGLE);
     return returnmessage;
   }
   return "no mvmt";
@@ -401,6 +427,8 @@ void loop() {
   Serial3.println(PRINT_STATE().c_str());
   Serial3.println("--------------------------------");
 
+  GYRO_TRANSMISSION();
+
   // code for send information back to java for reading!
   // if (commready && peripheralcheck) {
   //   // write to java for most current readings!
@@ -433,24 +461,26 @@ bool CHECK_CMD_POST_MOVE(string postmove) {
       int ms = mvmt.at(j);
       // ms *= 100;
       checkmsg += to_string(ms); // add for the return message
-    }
-    
+    };
+
     // clean up
     CLEANUP();
     string one = "-teen ";
     string two = checkmsg;
     string three = one + two;
     Serial.write(three.c_str());
-    return checkmsg == postmove;
+    double a = stod(checkmsg); // convert checkmsg to integer
+    double b = stod(postmove); // convert postmove to integer
+    return PERCENT_DIFF(a, b, 5);
   };
   // unable to check mvmt, as it was cleared!
   Serial3.println("Unable to check mvmt as it was cleared!");
   return false;
 };
 
-// should accept some array of params and family of servos to move
+// should accept some array of params and family of aileron_servos to move
 // WILL return true if post cmd check method returns true for the expected move verification!
-bool CMD_MOVE_SERVO(Servo group) {
+bool CMD_MOVE_SERVO(Servo s) {
   if (!mvmt.empty()) { // we have things to read!
     string returnmessage;
     for (size_t j = 0; j < mvmt.size(); j++) {
@@ -458,8 +488,8 @@ bool CMD_MOVE_SERVO(Servo group) {
       // ms *= 100;
       // send to move for real feedback
       delay(100);
-      MoveServo(servos, ms);
-      returnmessage += to_string(servos.read()); // add for the return message
+      MoveServo(s, ms);
+      returnmessage += to_string(s.read()); // add for the return message
     }
     return CHECK_CMD_POST_MOVE(returnmessage);
   }
@@ -468,10 +498,10 @@ bool CMD_MOVE_SERVO(Servo group) {
   return false;
 };
 
-// method for threads to adjust servos to manage the current angles
-void* Watch_My_Servos(void* arg) {
+// method for threads to adjust aileron_servos to manage the current angles
+void* Watch_My_aileron_servos(void* arg) {
   struct ThreadArgs* threadArgs = (struct ThreadArgs*)arg;
-  Servo* servo_to_adjust = threadArgs->servos;
+  Servo* servo_to_adjust = threadArgs->myServo;
   int threadId = threadArgs->threadId;
   while (true) {
     GYRO_TRANSMISSION();
@@ -482,17 +512,46 @@ void* Watch_My_Servos(void* arg) {
       int c_ms = servo_to_adjust->read();
       if (CURR_ROLL < STATE_ANGLE) {
         // angle is less, we need to move up!
-        c_ms += 2;
-        Serial3.println("------------MOVING UP--------------");
+        c_ms += 10;
+        // Serial3.println("------------MOVING UP--------------");
       } else if (CURR_ROLL > STATE_ANGLE) {
-        c_ms -= 2;
-        Serial3.println("------------MOVING DOWN--------------");
+        c_ms -= 10;
+        // Serial3.println("------------MOVING DOWN--------------");
       } else {
         Serial3.println("------------SOMEHOW STABLE--------------");
       }
 
       if (c_ms >= MIN_SERVO_ANGLE && c_ms <= MAX_SERVO_ANGLE) servo_to_adjust->write(c_ms);
     }
+  };
+  return NULL;
+};
+
+// method for threads to adjust aileron_servos to manage the current angles
+void* Watch_My_elevator_servos(void* arg) {
+  struct ThreadArgs* threadArgs = (struct ThreadArgs*)arg;
+  Servo* servo_to_adjust = threadArgs->myServo;
+  int threadId = threadArgs->threadId;
+  while (true) {
+    // GYRO_TRANSMISSION();
+
+    int diff = abs(STATE_ELEVATION - CURR_PITCH);
+    servo_to_adjust->write(diff);
+    // if (diff > 5) {
+    //   int c_ms = servo_to_adjust->read();
+    //   if (CURR_PITCH < STATE_ELEVATION) {
+    //     // angle is less, we need to move up!
+    //     c_ms += 2;
+    //     Serial3.println("------------MOVING UP--------------");
+    //   } else if (CURR_PITCH > STATE_ELEVATION) {
+    //     c_ms -= 2;
+    //     Serial3.println("------------MOVING DOWN--------------");
+    //   } else {
+    //     Serial3.println("------------SOMEHOW STABLE--------------");
+    //   }
+
+    //   if (c_ms >= MIN_SERVO_ANGLE && c_ms <= MAX_SERVO_ANGLE) servo_to_adjust->write(c_ms);
+    // }
   };
   return NULL;
 };
@@ -504,10 +563,13 @@ bool CMD_SET_STATE() {
     STATE_POWER = mvmt.at(2);
     CLEANUP();
 
-    // awake threads to look for their specific function, and maintain the angle by moving the necessary servos
+    // awake threads to look for their specific function, and maintain the angle by moving the necessary aileron_servos
     int st = threads.getState(SPAWNS[0]);
+    int sy = threads.getState(SPAWNS[1]);
     Serial3.print("STATE OF AILERON THREADS: "); Serial3.println(to_string(st).c_str());
+    Serial3.print("STATE OF ELEVATOR THREADS: "); Serial3.println(to_string(sy).c_str());
     if (st == 4) threads.restart(SPAWNS[0]);
+    if (sy == 4) threads.restart(SPAWNS[1]);
     return true;
   };
   Serial3.println("Unable to check mvmt as it was cleared!");
@@ -561,4 +623,11 @@ void FILL_MVMT_VECTOR(int index) {
 // returns buffer to string
 String CONVERT_UI8(uint8_t *arr) {
   return String((char *)arr);
+};
+
+// c is the threshold for percent difference
+bool PERCENT_DIFF(double a, double b, int c) {
+  double pd = (abs(a - b) / max(a, b)) * 100;
+  Serial3.print("PERCENT DIFF: "); Serial3.println(to_string(pd).c_str());
+  return pd <= c; 
 };
