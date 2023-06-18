@@ -2,6 +2,10 @@
 #include <TeensyThreads.h> // creates global "threads" var
 #include <Wire.h>
 #include <sys/time.h> // for timing functions
+
+using namespace std;
+
+Threads::Mutex angleMutex;
 // MPU GYRO is for regulating the angle or turn sent from java
 MPU6050 mpu;
 
@@ -24,7 +28,6 @@ const int DEFAULT_SERVO_ANGLE = 90;
 #include <pthread.h> // thread for servo management during state based requests
 #include <queue> // queue data structure in the event more data is received from the Serial, and the current is not complete
 
-using namespace std;
 const size_t bufferLength = 128; // define the maximum buffer length
 uint8_t buffer[bufferLength]; // create a buffer array of bytes
 const size_t headerLength = 5; // starts at 5, move to 1 after readys
@@ -41,9 +44,9 @@ bool peripheralcheck = false; // init periph. boolean to false
 const int DEFAULT_AILERON_ANGLE = DEFAULT_SERVO_ANGLE;
 int angle = DEFAULT_AILERON_ANGLE;
 
-int STATE_ANGLE = 0;
-int STATE_ELEVATION = 0;
-int STATE_POWER = 0;
+volatile int STATE_ANGLE = 0;
+volatile int STATE_ELEVATION = 0;
+volatile int STATE_POWER = 0;
 // Calculate tilt angles with offsets
 const float AccErrorX = 0.58;
 const float AccErrorY = -1.58;
@@ -62,6 +65,8 @@ const uint8_t RESET = 114; //r
 // movement vectors as request by commands
 vector<int> mvmt;
 
+bool THREAD_WATCH = false;
+
 // threads
 const int MAX_THREADS = 3;
 int SPAWNS[MAX_THREADS];  // Array to hold the thread objects
@@ -74,7 +79,13 @@ struct ThreadArgs {
 
 // necessary functions for threads
 void* Watch_My_aileron_servos(void* arg);
-void* Watch_My_elevator_serovs(void* arg);
+void* Watch_My_elevator_servos(void* arg);
+void* Servo_Supervisor();
+Threads aileronThread;
+ThreadArgs aileronThreadArgs;
+Threads elevatorThread;
+ThreadArgs elevatorThreadArgs;
+Threads SupervisorThread;
 
 void setup() {
   // put your setup code here, to run once:
@@ -113,7 +124,6 @@ void setup() {
   calculate_IMU_error();
   Serial3.println("MPU6050 is Ready!");
 
-
   // Create the thread arguments
   // !! GETSTATE meaning
   //     case 0:
@@ -126,24 +136,26 @@ void setup() {
   //        "ENDING"
   //     case 4:
   //        "SUSPENDED"
-  ThreadArgs aileronThreadArgs;
-  int ail_id = threads.addThread(Watch_My_aileron_servos, &aileronThreadArgs);
-  SPAWNS[0] = ail_id; // thread count is init at 0, as the main process is 0, so we must iterate by 1 for each new thread!
+
+  SPAWNS[0] = SupervisorThread.id();
+  // ThreadArgs aileronThreadArgs;
+  // int ail_id = threads.addThread(Watch_My_aileron_servos, &aileronThreadArgs);
+  SPAWNS[1] = aileronThread.id(); // thread count is init at 0, as the main process is 0, so we must iterate by 1 for each new thread!
   
   aileronThreadArgs.myServo = &aileron_servos;
-  aileronThreadArgs.threadId = Thread_ID(0); // set thread args to be the id of the first spawn!
+  aileronThreadArgs.threadId = Thread_ID(1); // set thread args to be the id of the first spawn!
 
-  ThreadArgs elevatorThreadArgs;
-  int elev_id = threads.addThread(Watch_My_elevator_servos, &elevatorThreadArgs);
-  SPAWNS[1] = elev_id; // thread count is init at 0, as the main process is 0, so we must iterate by 1 for each new thread!
+  //ThreadArgs elevatorThreadArgs;
+
+  // int elev_id = threads.addThread(Watch_My_elevator_servos, &elevatorThreadArgs);
+  SPAWNS[2] = elevatorThread.id(); // thread count is init at 0, as the main process is 0, so we must iterate by 1 for each new thread!
   
   elevatorThreadArgs.myServo = &elevator_servos;
-  elevatorThreadArgs.threadId = Thread_ID(1); // set thread args to be the id of the first spawn!
-
+  elevatorThreadArgs.threadId = Thread_ID(2); // set thread args to be the id of the first spawn!
+  
   // Create the Aileron thread and add to spawns array holding the threads
   Suspend_All_Threads();
 
-  // int Elevator_Thread = 
   // int Motor_Thread
 };
 
@@ -207,6 +219,7 @@ void Thread_To_Suspend(int i) {
 };
 
 void Suspend_All_Threads() {
+  THREAD_WATCH = false;
   Serial3.println("---------------SUSPENDING ALL THREADS-----------------");
   for (int i = 0; i < MAX_THREADS; i++) {
     Thread_To_Suspend(i);
@@ -277,9 +290,6 @@ void VERIFY(size_t i) {
     string three = one + two;
     Serial.write(three.c_str()); // write back to java for confirmation
     peripheralcheck = true;
-
-    // clean up
-    CLEANUP();
   };
 };
 
@@ -359,6 +369,7 @@ bool TRANSLATE(size_t i) {
       if (RESET_STATE()) {
         Serial3.println("--------------STATE RESET SUCCESSFULL--------------");
       } else Serial3.println("--------------FAILED TO RESET STATE--------------");
+      delay(100);
       MoveServo(aileron_servos, DEFAULT_AILERON_ANGLE);
       MoveServo(elevator_servos, DEFAULT_SERVO_ANGLE);
       return true;
@@ -427,7 +438,7 @@ void loop() {
   Serial3.println(PRINT_STATE().c_str());
   Serial3.println("--------------------------------");
 
-  GYRO_TRANSMISSION();
+  // GYRO_TRANSMISSION();
 
   // code for send information back to java for reading!
   // if (commready && peripheralcheck) {
@@ -504,25 +515,19 @@ void* Watch_My_aileron_servos(void* arg) {
   Servo* servo_to_adjust = threadArgs->myServo;
   int threadId = threadArgs->threadId;
   while (true) {
-    GYRO_TRANSMISSION();
+      delay(50);
 
-    int diff = abs(STATE_ANGLE - CURR_ROLL);
-
-    if (diff > 5) {
       int c_ms = servo_to_adjust->read();
       if (CURR_ROLL < STATE_ANGLE) {
         // angle is less, we need to move up!
-        c_ms += 10;
+        c_ms += 5;
         // Serial3.println("------------MOVING UP--------------");
       } else if (CURR_ROLL > STATE_ANGLE) {
-        c_ms -= 10;
+        c_ms -= 5;
         // Serial3.println("------------MOVING DOWN--------------");
-      } else {
-        Serial3.println("------------SOMEHOW STABLE--------------");
       }
 
       if (c_ms >= MIN_SERVO_ANGLE && c_ms <= MAX_SERVO_ANGLE) servo_to_adjust->write(c_ms);
-    }
   };
   return NULL;
 };
@@ -534,20 +539,19 @@ void* Watch_My_elevator_servos(void* arg) {
   int threadId = threadArgs->threadId;
   while (true) {
     // GYRO_TRANSMISSION();
-
     int diff = abs(STATE_ELEVATION - CURR_PITCH);
     servo_to_adjust->write(diff);
     // if (diff > 5) {
     //   int c_ms = servo_to_adjust->read();
     //   if (CURR_PITCH < STATE_ELEVATION) {
     //     // angle is less, we need to move up!
-    //     c_ms += 2;
+    //     c_ms += 10;
     //     Serial3.println("------------MOVING UP--------------");
     //   } else if (CURR_PITCH > STATE_ELEVATION) {
-    //     c_ms -= 2;
+    //     c_ms -= 10;
     //     Serial3.println("------------MOVING DOWN--------------");
     //   } else {
-    //     Serial3.println("------------SOMEHOW STABLE--------------");
+    //     break;
     //   }
 
     //   if (c_ms >= MIN_SERVO_ANGLE && c_ms <= MAX_SERVO_ANGLE) servo_to_adjust->write(c_ms);
@@ -556,21 +560,89 @@ void* Watch_My_elevator_servos(void* arg) {
   return NULL;
 };
 
+void Servo_Supervisor(void* arg) {
+  // now, add threads to the process, but suspend them
+  int ail_id = threads.addThread(Watch_My_aileron_servos, &aileronThreadArgs);
+  SPAWNS[1] = ail_id;
+  Thread_To_Suspend(1);
+  
+  int ele_id = threads.addThread(Watch_My_elevator_servos, &elevatorThreadArgs);
+  SPAWNS[2] = ele_id;
+  Thread_To_Suspend(2);
+
+  bool aileronRestarted = false;
+  
+  while(THREAD_WATCH) {
+    GYRO_TRANSMISSION();
+
+    bool roll_diff = (abs(STATE_ANGLE - CURR_ROLL) > 10);
+    // int pitch_diff = abs(STATE_ELEVATION - CURR_PITCH);
+
+    // if our diff is off, we need to start the thread
+    if (Thread_Status(SPAWNS[1]) == 4 && roll_diff && !aileronRestarted) {aileronRestarted = true; threads.restart(SPAWNS[1]); Serial3.print("RESTARTING THE THREAD STATUS: "); Serial3.println(String(Thread_Status(SPAWNS[1])));};
+    if (!roll_diff) {aileronRestarted = false; Thread_To_Suspend(1);} // if our thread is running, but the diff is no longer a problem, suspend the thread 
+  };
+  return NULL;
+};
+
+// void Servo_Supervisor_Wrapper(void* arg) {
+//   Serial3.println("HERE!");
+//   if (THREAD_WATCH) {
+    
+
+//     Servo_Supervisor();
+//   } else {
+//     Serial3.println("Looks like something was wrong. Preventing Supervisor from starting!");
+//   }
+// };
+
+//     case 0:
+//         "EMPTY"
+//     case 1:
+//         "RUNNING"
+//     case 2:
+//         "ENDED"
+//     case 3:
+//        "ENDING"
+//     case 4:
+//        "SUSPENDED"
 bool CMD_SET_STATE() {
   if (!mvmt.empty()) {
+    Serial3.print("mvmt size: ");
+    Serial3.println(mvmt.size());
+    Serial3.print("mvmt[0]: ");
+    Serial3.println(mvmt.at(0));
+    Serial3.print("mvmt[1]: ");
+    Serial3.println(mvmt.at(1));
+    Serial3.print("mvmt[2]: ");
+    Serial3.println(mvmt.at(2));
+    
+    angleMutex.lock();
     STATE_ANGLE = mvmt.at(0);
+    angleMutex.unlock();
+
     STATE_ELEVATION = mvmt.at(1);
     STATE_POWER = mvmt.at(2);
+
     CLEANUP();
 
+    //threads.addThread(Servo_Supervisor_Wrapper, nullptr);
+
     // awake threads to look for their specific function, and maintain the angle by moving the necessary aileron_servos
-    int st = threads.getState(SPAWNS[0]);
-    int sy = threads.getState(SPAWNS[1]);
-    Serial3.print("STATE OF AILERON THREADS: "); Serial3.println(to_string(st).c_str());
-    Serial3.print("STATE OF ELEVATOR THREADS: "); Serial3.println(to_string(sy).c_str());
-    if (st == 4) threads.restart(SPAWNS[0]);
-    if (sy == 4) threads.restart(SPAWNS[1]);
-    return true;
+    // int st = threads.getState(SPAWNS[0]);
+    // int sy = threads.getState(SPAWNS[1]);
+    // Serial3.print("STATE OF AILERON THREADS: "); Serial3.println(to_string(st).c_str());
+    // Serial3.print("STATE OF ELEVATOR THREADS: "); Serial3.println(to_string(sy).c_str());
+    // if (st == 4) threads.restart(SPAWNS[0]);
+    // if (sy == 4) threads.restart(SPAWNS[1]);
+    // Start the servo supervisor thread if it is not running
+    int s_state = threads.getState(SPAWNS[0]);
+    if (s_state != 1) { // Supervisor is not running
+      THREAD_WATCH = true; // set thread watch to true
+      int sup_id = threads.addThread(Servo_Supervisor, nullptr);
+      SPAWNS[0] = sup_id;
+    }
+    return THREAD_WATCH;
   };
   Serial3.println("Unable to check mvmt as it was cleared!");
   return false;
@@ -609,7 +681,8 @@ void FILL_MVMT_VECTOR(int index) {
   int start = (sizeof(headerBytes) + index) - headerLength;
   string num;
   for (size_t j = start; j < sizeof(buffer); j++) {
-    if (buffer[j] != 0 && buffer[j] != 44) { // it equal to comma, skip
+    if (buffer[j] != 0 && buffer[j] != 44) { // if equal to comma, skip
+      Serial3.println(buffer[j]);
       num.push_back(char(buffer[j])); // push to num to concat -> 6,22 -> 6 | 2 <- 2 => 22
     } else {
       if (!num.empty()) {
