@@ -538,24 +538,17 @@ void* Watch_My_elevator_servos(void* arg) {
   Servo* servo_to_adjust = threadArgs->myServo;
   int threadId = threadArgs->threadId;
   while (true) {
-    // GYRO_TRANSMISSION();
-    int diff = abs(STATE_ELEVATION - CURR_PITCH);
-    servo_to_adjust->write(diff);
-    // if (diff > 5) {
-    //   int c_ms = servo_to_adjust->read();
-    //   if (CURR_PITCH < STATE_ELEVATION) {
-    //     // angle is less, we need to move up!
-    //     c_ms += 10;
-    //     Serial3.println("------------MOVING UP--------------");
-    //   } else if (CURR_PITCH > STATE_ELEVATION) {
-    //     c_ms -= 10;
-    //     Serial3.println("------------MOVING DOWN--------------");
-    //   } else {
-    //     break;
-    //   }
+    delay(50);
+    
+    int c_ms = servo_to_adjust->read();
+    if (CURR_PITCH < STATE_ELEVATION) {
+      // angle is less, we need to move up!
+      c_ms += 5;
+    } else if (CURR_PITCH > STATE_ELEVATION) {
+      c_ms -= 5;
+    }
 
-    //   if (c_ms >= MIN_SERVO_ANGLE && c_ms <= MAX_SERVO_ANGLE) servo_to_adjust->write(c_ms);
-    // }
+    if (c_ms >= MIN_SERVO_ANGLE && c_ms <= MAX_SERVO_ANGLE) servo_to_adjust->write(c_ms);
   };
   return NULL;
 };
@@ -571,16 +564,20 @@ void Servo_Supervisor(void* arg) {
   Thread_To_Suspend(2);
 
   bool aileronRestarted = false;
+  bool elevatorRestarted = false;
   
   while(THREAD_WATCH) {
+    delay(50);
     GYRO_TRANSMISSION();
 
     bool roll_diff = (abs(STATE_ANGLE - CURR_ROLL) > 10);
-    // int pitch_diff = abs(STATE_ELEVATION - CURR_PITCH);
+    bool pitch_diff = abs(STATE_ELEVATION - CURR_PITCH > 10);
 
     // if our diff is off, we need to start the thread
     if (Thread_Status(SPAWNS[1]) == 4 && roll_diff && !aileronRestarted) {aileronRestarted = true; threads.restart(SPAWNS[1]); Serial3.print("RESTARTING THE THREAD STATUS: "); Serial3.println(String(Thread_Status(SPAWNS[1])));};
+    if (Thread_Status(SPAWNS[2]) == 4 && pitch_diff && !elevatorRestarted) {elevatorRestarted = true; threads.restart(SPAWNS[2]); Serial3.print("RESTARTING THE THREAD STATUS: "); Serial3.println(String(Thread_Status(SPAWNS[2])));};
     if (!roll_diff) {aileronRestarted = false; Thread_To_Suspend(1);} // if our thread is running, but the diff is no longer a problem, suspend the thread 
+    if (!pitch_diff) {elevatorRestarted = false; Thread_To_Suspend(2);}
   };
   return NULL;
 };
