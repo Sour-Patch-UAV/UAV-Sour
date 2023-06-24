@@ -90,6 +90,7 @@ public class InstructionManagement {
                 } catch (IOException e) {
                     e.printStackTrace();
                 }
+                return true;
             case Definitions.TALK: 
                 try {
                     TALK(messenger, parts[1]);
