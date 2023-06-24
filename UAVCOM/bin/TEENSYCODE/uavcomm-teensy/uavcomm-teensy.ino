@@ -90,7 +90,7 @@ bool Sub_Threads_Created = false;
 unsigned long lastAileronTime = 0;
 unsigned long lastElevatorTime = 0;
 unsigned long lastSupervisorTime = 0;
-const unsigned long servoInterval = 50;  // Adjust this interval as needed
+const unsigned long servoInterval = 30000;  // Adjust this interval as needed
 
 mutex STATE_ANGLE_MUTEX;
 mutex STATE_ELEVATION_MUTEX;
@@ -325,24 +325,7 @@ void GYRO_TRANSMISSION() {
   // Convert accelerometer data to tilt angles
   CURR_ROLL = (atan2(accelerometer_y, sqrt(pow(accelerometer_x, 2) + pow(accelerometer_z, 2))) * (180.0 / PI)) - AccErrorX;
   CURR_PITCH = (atan2(accelerometer_x, sqrt(pow(accelerometer_y, 2) + pow(accelerometer_z, 2))) * (180.0 / PI)) + AccErrorY;
-  // Serial3.print("---------ROLL ANGLE---------------- ( ");
-  // Serial3.println(CURR_ROLL);
-  // Serial3.println("---------------------------------------");
-  // Serial3.print("---------PITCH ANGLE---------------- ( ");
-  // Serial3.println(CURR_PITCH);
-  // Serial3.println("---------------------------------------");
-
-  delay(50);
-
-  // // Print out data
-  // Serial3.print("aX = "); Serial3.print(accelerometer_x);
-  // Serial3.print(" | aY = "); Serial3.print(accelerometer_y);
-  // Serial3.print(" | aZ = "); Serial3.print(accelerometer_z);
-  // Serial3.print(" | tmp = "); Serial3.print(temperature / 340.00 + 36.53);
-  // Serial3.print(" | gX = "); Serial3.print(gyro_x);
-  // Serial3.print(" | gY = "); Serial3.print(gyro_y);
-  // Serial3.print(" | gZ = "); Serial3.print(gyro_z);
-  // Serial3.println();
+  delay(10);
 };
 
 // here, I will send to appropriate command and fulfill with the provided instruction
@@ -448,31 +431,12 @@ void loop() {
     CLEANUP();
   };
 
-  // if (!THREAD_WATCH) {
-  delay(1000);
-  Serial3.println("--------------------------------");
-  Serial3.println(PRINT_STATE().c_str());
-  Serial3.println("--------------------------------");
-  // Serial3.println("MVMT Empty: " + String(mvmt.empty()));
-  // Serial3.println("--------------------------------");
-  // Serial3.println("BUFFER Array Empty: " + String(headerBytes[0] == 0));
-  // Serial3.println("--------------------------------");
-  // Serial3.println("Serial Av.? " + String(Serial.available()));
-  //};
-
-
-  // GYRO_TRANSMISSION();
-
-  // code for send information back to java for reading!
-  // if (commready && peripheralcheck) {
-  //   // write to java for most current readings!
-  //   string one = "-teen ";
-  //   string msg = one + PRINT_STATE();
-  //   Serial.write(msg.c_str());
-  // }
-
-  // commready = false;
-  // peripheralcheck = false;
+  if (!THREAD_WATCH) {
+    delay(1000);
+    Serial3.println("--------------------------------");
+    Serial3.println(PRINT_STATE().c_str());
+    Serial3.println("--------------------------------");
+  };
 };
 
 // check for -java <- message from java!
@@ -538,7 +502,7 @@ void* Watch_My_aileron_servos(void* arg) {
   Servo* servo_to_adjust = threadArgs->myServo;
 
   while (true) {
-    unsigned long currentTime = millis();
+    unsigned long currentTime = micros();
     if (currentTime - lastAileronTime >= servoInterval) {
       lastAileronTime = currentTime;
 
@@ -571,7 +535,7 @@ void* Watch_My_elevator_servos(void* arg) {
   Servo* servo_to_adjust = threadArgs->myServo;
 
   while (true) {
-    unsigned long currentTime = millis();
+    unsigned long currentTime = micros();
     // if enough time has passed to begun trying to adjust
     if (currentTime - lastElevatorTime >= servoInterval) {
       lastElevatorTime = currentTime;
@@ -600,7 +564,6 @@ void* Watch_My_elevator_servos(void* arg) {
 };
 
 void Servo_Supervisor(void* arg) {
-
   // lock spawns resources, Supervisor is in control now
   SPAWN_ONE.lock();
   SPAWN_TWO.lock();
@@ -626,7 +589,7 @@ void Servo_Supervisor(void* arg) {
   bool elevatorRestarted = false;
 
   while (THREAD_WATCH) {
-    unsigned long currentTime = millis();
+    unsigned long currentTime = micros();
     GYRO_TRANSMISSION();
 
     if (currentTime - lastSupervisorTime >= servoInterval) {
@@ -656,7 +619,6 @@ void Servo_Supervisor(void* arg) {
         };
 
         if (Thread_Status(2) == 4 && pitch_diff && !elevatorRestarted) {
-          Serial3.println("RESTARTING THE ELEVATOR THREAD!!");
           elevatorRestarted = true;
           threads.restart(SPAWNS[2]);
         };
@@ -718,17 +680,7 @@ bool CMD_SET_STATE() {
         int sup_id = threads.addThread(Servo_Supervisor, nullptr);
         SPAWNS[0] = sup_id;
       }
-    }
-    //  else {
-    //   SPAWN_ONE.lock();
-    //   SPAWN_TWO.lock();
-    //   // threads have the potential to be in action, so resetting their states here will help keep the timing clean
-    //   Thread_To_Suspend(1);
-    //   Thread_To_Suspend(2);
-    // };
-
-    // SPAWN_ONE.unlock();
-    // SPAWN_TWO.unlock();
+    };
 
     return THREAD_WATCH;
   };
