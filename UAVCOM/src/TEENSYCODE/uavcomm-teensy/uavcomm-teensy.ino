@@ -582,10 +582,8 @@ void* Watch_My_elevator_servos(void* arg) {
         if (CURR_PITCH < STATE_ELEVATION) {
           // angle is less, we need to move up!
           c_ms += 5;
-          Serial3.println("MOVING NOSE UP");
         } else if (CURR_PITCH > STATE_ELEVATION) {
           c_ms -= 5;
-          Serial3.println("MOVING NOSE DOWN");
         }
         if (c_ms >= MIN_SERVO_ANGLE && c_ms <= MAX_SERVO_ANGLE) servo_to_adjust->write(c_ms);
 
@@ -649,28 +647,29 @@ void Servo_Supervisor(void* arg) {
       };
 
       // lock spawns resources, Supervisor is in control now
-      SPAWN_ONE.lock();
-      SPAWN_TWO.lock();
+      if (SPAWN_ONE.try_lock() && SPAWN_TWO.try_lock()) {
 
-      // if our diff is off, we need to start the thread
-      if (Thread_Status(SPAWNS[1]) == 4 && roll_diff && !aileronRestarted) {
-        aileronRestarted = true;
-        threads.restart(SPAWNS[1]);
-      };
+        // if our diff is off, we need to start the thread
+        if (Thread_Status(1) == 4 && roll_diff && !aileronRestarted) {
+          aileronRestarted = true;
+          threads.restart(SPAWNS[1]);
+        };
 
-      if (Thread_Status(SPAWNS[2]) == 4 && pitch_diff && !elevatorRestarted) {
-        elevatorRestarted = true;
-        threads.restart(SPAWNS[2]);
-      };
+        if (Thread_Status(2) == 4 && pitch_diff && !elevatorRestarted) {
+          Serial3.println("RESTARTING THE ELEVATOR THREAD!!");
+          elevatorRestarted = true;
+          threads.restart(SPAWNS[2]);
+        };
 
-      if (!roll_diff) {
-        aileronRestarted = false;
-        Thread_To_Suspend(1);
-      };
+        if (!roll_diff) {
+          aileronRestarted = false;
+          Thread_To_Suspend(1);
+        };
 
-      if (!pitch_diff) {
-        elevatorRestarted = false;
-        Thread_To_Suspend(2);
+        if (!pitch_diff) {
+          elevatorRestarted = false;
+          Thread_To_Suspend(2);
+        };
       };
 
       // unlock spawns
@@ -719,7 +718,17 @@ bool CMD_SET_STATE() {
         int sup_id = threads.addThread(Servo_Supervisor, nullptr);
         SPAWNS[0] = sup_id;
       }
-    };
+    }
+    //  else {
+    //   SPAWN_ONE.lock();
+    //   SPAWN_TWO.lock();
+    //   // threads have the potential to be in action, so resetting their states here will help keep the timing clean
+    //   Thread_To_Suspend(1);
+    //   Thread_To_Suspend(2);
+    // };
+
+    // SPAWN_ONE.unlock();
+    // SPAWN_TWO.unlock();
 
     return THREAD_WATCH;
   };
